@@ -25,6 +25,7 @@ FILES = [
     "ssdt.py",
     "ai_fallback.py",
     "updater.py",
+    "efi_check.py",
 ]
 
 
@@ -70,8 +71,11 @@ def check_and_update(silent: bool = False) -> bool:
             print("(offline, skipping)")
         return False
 
+    base_dir = Path(__file__).parent
     local_sha = _get_local_sha()
-    if remote_sha == local_sha:
+    missing = [f for f in FILES if not (base_dir / f).exists()]
+
+    if remote_sha == local_sha and not missing:
         if not silent:
             print("up to date.")
         return False

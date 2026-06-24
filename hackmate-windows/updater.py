@@ -34,14 +34,16 @@ def check_and_update(silent: bool = False) -> bool:
     if not remote_sha:
         return False
 
+    base_dir = Path(__file__).parent
     local_sha = VERSION_FILE.read_text().strip() if VERSION_FILE.exists() else ""
-    if remote_sha == local_sha:
+    missing = [f for f in FILES if not (base_dir / f).exists()]
+
+    if remote_sha == local_sha and not missing:
         return False
 
     if not silent:
-        print(f"HackMate update available — downloading...")
+        print("HackMate update available — downloading...")
 
-    base_dir = Path(__file__).parent
     updated = False
     for fname in FILES:
         url = f"{RAW_BASE}/{fname}"
@@ -57,8 +59,7 @@ def check_and_update(silent: bool = False) -> bool:
         except Exception:
             pass
 
-    if updated:
-        VERSION_FILE.write_text(remote_sha)
-        if not silent:
-            print("Updated. Restarting...")
-    return updated
+    VERSION_FILE.write_text(remote_sha)
+    if updated and not silent:
+        print("Updated. Restarting...")
+    return updated or bool(missing)

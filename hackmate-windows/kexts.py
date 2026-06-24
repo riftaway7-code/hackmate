@@ -202,27 +202,52 @@ def get_alc_layout(codec: str) -> int:
 # ─── Detection helpers ────────────────────────────────────────────────────────
 
 def _dmi(field: str) -> str:
+    wmi_map = {
+        "sys_vendor":    "(Get-WmiObject Win32_ComputerSystem).Manufacturer",
+        "product_name":  "(Get-WmiObject Win32_ComputerSystem).Model",
+        "board_vendor":  "(Get-WmiObject Win32_BaseBoard).Manufacturer",
+        "board_name":    "(Get-WmiObject Win32_BaseBoard).Product",
+    }
+    cmd = wmi_map.get(field)
+    if not cmd:
+        return ""
     try:
-        return Path(f"/sys/class/dmi/id/{field}").read_text().strip().lower()
+        return subprocess.run(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            capture_output=True, text=True, timeout=8
+        ).stdout.strip().lower()
     except Exception:
         return ""
 
 
 def _detect_touchpad_type() -> str:
-    dmesg = subprocess.run(["dmesg"], capture_output=True, text=True).stdout.lower()
-    i2c = subprocess.run(["find", "/sys/bus/i2c/devices", "-name", "name"],
-                         capture_output=True, text=True).stdout.lower()
-    smbus = subprocess.run(["find", "/sys/bus/platform/devices", "-name", "name"],
-                           capture_output=True, text=True).stdout.lower()
-    combined = dmesg + i2c + smbus
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, timeout=10
+        ).stdout.lower()
+    except Exception:
+        out = ""
 
-    if "rmi4" in combined or "rmi " in combined:     return "rmi"
+    try:
+        pnp = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty PNPDeviceID"],
+            capture_output=True, text=True, timeout=10
+        ).stdout.lower()
+    except Exception:
+        pnp = ""
+
+    combined = out + pnp
+
+    if "rmi4" in combined or "rmi" in combined:      return "rmi"
     if "elan" in combined and "i2c" in combined:     return "i2c_elan"
     if "synaptics" in combined and "i2c" in combined:return "i2c_synaptics"
     if "atmel" in combined and "i2c" in combined:    return "i2c_atmel"
     if "goodix" in combined:                         return "i2c_goodix"
     if "fte" in combined and "i2c" in combined:      return "i2c_fte"
-    if "i2c-hid" in combined:                        return "i2c_hid"
+    if "i2c" in combined:                            return "i2c_hid"
     return "ps2"
 
 
@@ -252,8 +277,15 @@ def _is_hedt(profile: HardwareProfile) -> bool:
 
 
 def _has_card_reader() -> bool:
-    lspci = subprocess.run(["lspci", "-nn"], capture_output=True, text=True).stdout.lower()
-    return "rts5" in lspci or "card reader" in lspci or "rtsx" in lspci
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'card reader|rts5|rtsx' } | Measure-Object | Select-Object -ExpandProperty Count"],
+            capture_output=True, text=True, timeout=8
+        ).stdout.strip()
+        return int(out) > 0
+    except Exception:
+        return False
 
 
 # ─── Selection logic ──────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ class HardwareProfile:
     has_thunderbolt: bool = False
     nvme_present: bool = False
     smbios_model: str = ""
+    oc_platform: str = ""
 
 
 def _ps(command: str) -> str:
@@ -194,6 +195,14 @@ def _smbios_model(cpu_gen: int, gpu_vendor: str, platform: str, cpu_vendor: str)
         return m.get(cpu_gen, "iMac19,1")
 
 
+_OC_PLATFORM_MAP = {
+    14: "Raptor Lake", 13: "Raptor Lake", 12: "Alder Lake",
+    11: "Tiger Lake",  10: "Ice Lake",    9:  "Coffee Lake",
+    8:  "Coffee Lake", 7:  "Kaby Lake",   6:  "Skylake",
+    5:  "Broadwell",   4:  "Haswell",     3:  "Ivy Bridge",
+    2:  "Sandy Bridge",
+}
+
 def scan() -> HardwareProfile:
     p = HardwareProfile()
     p.cpu_name, p.cpu_vendor, p.cpu_generation, p.cpu_codename = _detect_cpu()
@@ -204,4 +213,5 @@ def scan() -> HardwareProfile:
     p.platform = _detect_platform()
     p.nvme_present = _detect_nvme()
     p.smbios_model = _smbios_model(p.cpu_generation, p.gpu_vendor, p.platform, p.cpu_vendor)
+    p.oc_platform = _OC_PLATFORM_MAP.get(p.cpu_generation, p.cpu_codename or "Unknown")
     return p

@@ -456,10 +456,28 @@ class InstallScreen(Screen):
                 shutil.rmtree(str(com_apple))
             com_apple.mkdir(parents=True)
             for src in recovery_dest.iterdir():
-                mb = src.stat().st_size // 1024 // 1024
-                log(f"  Writing {src.name} ({mb} MB)...", "info")
-                shutil.copy2(str(src), str(com_apple / src.name))
-                log(f"  {src.name} written", "ok")
+                total_mb = src.stat().st_size // 1024 // 1024
+                dst = com_apple / src.name
+                log(f"  Writing {src.name} ({total_mb} MB)...", "info")
+                import time
+                chunk = 4 * 1024 * 1024  # 4 MB chunks
+                written = 0
+                t0 = time.time()
+                with open(src, "rb") as fin, open(dst, "wb") as fout:
+                    while True:
+                        buf = fin.read(chunk)
+                        if not buf:
+                            break
+                        fout.write(buf)
+                        written += len(buf)
+                        elapsed = time.time() - t0 or 0.001
+                        speed = written / elapsed / 1024 / 1024
+                        done_mb = written // 1024 // 1024
+                        self.app.call_from_thread(
+                            self._status, 28,
+                            f"Writing {src.name}: {done_mb}/{total_mb} MB ({speed:.1f} MB/s)"
+                        )
+                log(f"  {src.name} written ({total_mb} MB)", "ok")
 
             # ── 4. Generate SMBIOS ────────────────────────────────────────────
             ui(35, "Generating SMBIOS...")

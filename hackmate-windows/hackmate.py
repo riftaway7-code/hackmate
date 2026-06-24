@@ -115,13 +115,14 @@ def get_usb_drives() -> list[tuple[str, str, str]]:
 
 
 def _format_usb_diskpart(drive_letter: str) -> bool:
-    """Format a drive using diskpart."""
+    """Format a drive using diskpart, preserving the original drive letter."""
+    letter = drive_letter.rstrip(':\\')
     script = (
-        f"select volume {drive_letter.rstrip(':')}\n"
+        f"select volume {letter}\n"
         "clean\n"
         "create partition primary\n"
         "format fs=fat32 quick label=HACKINTOSH\n"
-        "assign\n"
+        f"assign letter={letter}\n"
         "exit\n"
     )
     script_path = Path(tempfile.mktemp(suffix=".txt"))

@@ -578,8 +578,27 @@ class InstallScreen(Screen):
                 )
                 log(f"  {len(manual)} SSDTs need manual install — see README_MANUAL_SSDTS.txt", "warn")
 
-            # ── 10. Unmount ───────────────────────────────────────────────────
-            ui(97, "Unmounting USB...")
+            # ── 10. EFI sanity check ─────────────────────────────────────────
+            ui(97, "Running EFI sanity check...")
+            log("", "info")
+            log("── EFI Sanity Check ──────────────────────────────", "header")
+            from efi_check import check as efi_check
+            issues = efi_check(efi_root, profile)
+            errors   = [m for lvl, m in issues if lvl == "error"]
+            warnings = [m for lvl, m in issues if lvl == "warn"]
+            oks      = [m for lvl, m in issues if lvl == "ok"]
+            for lvl, m in issues:
+                log(f"  {m}", lvl)
+            log("──────────────────────────────────────────────────", "header")
+            if errors:
+                log(f"  {len(errors)} error(s) found — fix before booting", "error")
+            elif warnings:
+                log(f"  {len(warnings)} warning(s) — review before booting", "warn")
+            else:
+                log(f"  All checks passed ({len(oks)} OK)", "ok")
+
+            # ── 11. Unmount ───────────────────────────────────────────────────
+            ui(99, "Unmounting USB...")
             cmd(["umount", str(mount)], capture_output=True)
             shutil.rmtree(str(tmp), ignore_errors=True)
 

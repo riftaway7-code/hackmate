@@ -114,15 +114,17 @@ def get_usb_drives() -> list[tuple[str, str, str]]:
     return drives
 
 
+MOUNT_LETTER = "Z"
+
 def _format_usb_diskpart(drive_letter: str) -> bool:
-    """Format a drive using diskpart, preserving the original drive letter."""
-    letter = drive_letter.rstrip(':\\')
+    """Format a drive using diskpart, mounting it as Z: to avoid conflicts."""
+    src = drive_letter.rstrip(':\\')
     script = (
-        f"select volume {letter}\n"
+        f"select volume {src}\n"
         "clean\n"
         "create partition primary\n"
         "format fs=fat32 quick label=HACKINTOSH\n"
-        f"assign letter={letter}\n"
+        f"assign letter={MOUNT_LETTER}\n"
         "exit\n"
     )
     script_path = Path(tempfile.mktemp(suffix=".txt"))
@@ -407,16 +409,17 @@ class InstallScreen(Screen):
         try:
             # ── 1. Format USB ────────────────────────────────────────────────
             ui(2, f"Formatting {drive} as FAT32...")
-            log(f"── Formatting {drive}...", "header")
+            log(f"── Formatting {drive}... (will mount as {MOUNT_LETTER}:)", "header")
             self.app.call_from_thread(self._cmd_log, ["diskpart", "/s", "format_usb.txt"])
-            ok = _format_usb_diskpart(drive)
-            if not ok:
+            fmt_ok = _format_usb_diskpart(drive)
+            if not fmt_ok:
                 raise RuntimeError(f"Failed to format {drive}")
-            log(f"  {drive} formatted as FAT32", "ok")
+            mount = f"{MOUNT_LETTER}:"
+            log(f"  Formatted and mounted as {mount}", "ok")
 
             # ── 2. Create EFI structure ───────────────────────────────────────
             ui(8, "Creating EFI structure...")
-            efi_root  = Path(f"{drive}\\EFI")
+            efi_root  = Path(f"{mount}\\EFI")
             oc_dir    = efi_root / "OC"
             boot_dir  = efi_root / "BOOT"
             kext_dir  = oc_dir / "Kexts"
@@ -578,10 +581,30 @@ class InstallScreen(Screen):
             # ── Cleanup ───────────────────────────────────────────────────────
             shutil.rmtree(str(tmp), ignore_errors=True)
 
-            ui(100, f"Done! {version.name} EFI ready on {drive}")
+            # ── EFI sanity check ─────────────────────────────────────────────
+            ui(100, "Running EFI sanity check...")
+            log("", "info")
+            log("── EFI Sanity Check ──────────────────────────────", "header")
+            from efi_check import check as efi_check
+            issues = efi_check(efi_root, profile)
+            errors   = [m for lvl, m in issues if lvl == "error"]
+            warnings = [m for lvl, m in issues if lvl == "warn"]
+            oks      = [m for lvl, m in issues if lvl == "ok"]
+            for _, m in issues:
+                lvl = next(l for l, msg in issues if msg == m)
+                log(f"  {m}", lvl)
+            log("──────────────────────────────────────────────────", "header")
+            if errors:
+                log(f"  {len(errors)} error(s) found — fix before booting", "error")
+            elif warnings:
+                log(f"  {len(warnings)} warning(s) — review before booting", "warn")
+            else:
+                log(f"  All checks passed ({len(oks)} OK)", "ok")
+
+            ui(100, f"Done! {version.name} EFI ready on {mount}")
             log("", "info")
             log("══════════════════════════════════════════════════", "header")
-            log("  USB is ready!", "ok")
+            log(f"  USB is ready on {mount}!", "ok")
             if manual:
                 log("  ! Some SSDTs need manual install (see README_MANUAL_SSDTS.txt)", "warn")
             log("  1. Boot from the USB to install macOS", "info")

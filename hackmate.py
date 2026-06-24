@@ -10,6 +10,10 @@ if os.geteuid() != 0:
     print("HackMate requires root. Run with: sudo python3 hackmate.py")
     sys.exit(1)
 
+from updater import check_and_update
+if check_and_update():
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Label, Button, ListView, ListItem, ProgressBar, Static, RichLog, LoadingIndicator
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
@@ -520,6 +524,20 @@ class InstallScreen(Screen):
                     if found:
                         shutil.copy(str(found[0]), str(driver_dir / driver))
                         log(f"  Driver: {driver}", "ok")
+
+                # HfsPlus.efi is not in the OC zip — download from OcBinaryData
+                hfsplus_dest = driver_dir / "HfsPlus.efi"
+                if not hfsplus_dest.exists():
+                    log("  HfsPlus.efi not in OC zip — fetching from OcBinaryData...", "info")
+                    self.app.call_from_thread(self._cmd_log, ["wget", "OcBinaryData/Drivers/HfsPlus.efi"])
+                    hfsplus_url = "https://raw.githubusercontent.com/acidanthera/OcBinaryData/master/Drivers/HfsPlus.efi"
+                    try:
+                        req = urllib.request.Request(hfsplus_url, headers={"User-Agent": "HackMate/1.0"})
+                        with urllib.request.urlopen(req, timeout=15) as r:
+                            hfsplus_dest.write_bytes(r.read())
+                        log("  HfsPlus.efi downloaded", "ok")
+                    except Exception as e:
+                        log(f"  HfsPlus.efi download failed: {e}", "error")
             else:
                 log("  Could not find OpenCore release asset", "error")
 

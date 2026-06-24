@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO       = "riftaway7-code/hackmate"
 BRANCH     = "main"
-RAW_BASE   = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}"
+RAW_BASE   = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/hackmate-linux"
 API_URL    = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
 VERSION_FILE = Path(__file__).parent / ".version"
 

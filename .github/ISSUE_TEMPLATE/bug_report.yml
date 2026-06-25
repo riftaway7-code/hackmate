@@ -1,0 +1,75 @@
+name: Bug Report
+description: Report a bug or issue with hackmate
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the
+        information below so we can reproduce and fix the issue.
+  - type: dropdown
+    id: os-type
+    attributes:
+      label: Operating System
+      description: Are you using Windows or Linux?
+      options:
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version / Distro
+      description: What version of Windows or which Linux distro are you running?
+      placeholder: "e.g. Windows 11 23H2, Ubuntu 22.04, Arch Linux, etc."
+    validations:
+      required: true
+  - type: dropdown
+    id: machine-type
+    attributes:
+      label: Machine Type
+      description: Is it a desktop or laptop?
+      options:
+        - Desktop
+        - Laptop
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: Target macOS Version
+      description: What macOS version are you targeting to install?
+      placeholder: "e.g. macOS Sonoma 14.5, macOS Ventura 13.6, etc."
+    validations:
+      required: true
+  - type: textarea
+    id: config-plist
+    attributes:
+      label: config.plist
+      description: Paste your config.plist contents here. Please use a code block.
+      render: xml
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Attach any relevant logs (boot logs, debug logs, etc.). Use a code block or paste a link to a pastebin.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Attach any screenshots that show the issue.
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue Description
+      description: Describe the problem you're experiencing. What happened? What did you expect to happen?
+    validations:
+      required: true

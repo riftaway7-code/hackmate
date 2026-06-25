@@ -481,7 +481,15 @@ def _find_asset(assets: list, pattern: str) -> Optional[dict]:
     return None
 
 
-def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None) -> dict[str, str]:
+def _kext_valid(kext_path: Path) -> bool:
+    return (
+        kext_path.is_dir() and
+        (kext_path / "Contents" / "Info.plist").exists() and
+        (kext_path / "Contents" / "Info.plist").stat().st_size > 100
+    )
+
+
+def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify: bool = False) -> dict[str, str]:
     dest.mkdir(parents=True, exist_ok=True)
     tmp = dest / "_tmp"
     tmp.mkdir(exist_ok=True)
@@ -489,6 +497,14 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None) -> dict
     seen_repos: dict[str, list] = {}
 
     for i, kext in enumerate(kexts):
+        kext_dest = dest / f"{kext.name}.kext"
+
+        if verify and _kext_valid(kext_dest):
+            if progress_cb:
+                progress_cb(i, len(kexts), f"{kext.name} — already valid, skipping")
+            results[kext.name] = "OK (cached)"
+            continue
+
         if progress_cb:
             progress_cb(i, len(kexts), f"Downloading {kext.name}...")
 
@@ -514,6 +530,12 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None) -> dict
             results[kext.name] = f"ERROR: download failed: {e}"
             continue
 
+        expected_size = asset.get("size", 0)
+        actual_size = zip_path.stat().st_size
+        if expected_size and abs(actual_size - expected_size) > 1024:
+            results[kext.name] = f"ERROR: size mismatch (got {actual_size}, expected {expected_size})"
+            continue
+
         extract_dir = tmp / asset["name"].replace(".zip", "")
         with zipfile.ZipFile(zip_path, "r") as z:
             z.extractall(str(extract_dir))
@@ -528,7 +550,6 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None) -> dict
             next((p for p in all_kexts if base in p.name.lower()), None)
         )
         if found:
-            kext_dest = dest / kext_name
             if kext_dest.exists():
                 shutil.rmtree(str(kext_dest))
             shutil.copytree(str(found), str(kext_dest))

@@ -535,19 +535,15 @@ class InstallScreen(Screen):
             kexts = select_kexts(profile)
             log(f"  {len(kexts)} kexts selected for this hardware", "ok")
 
-            if repair and kext_dir.exists():
-                shutil.rmtree(str(kext_dir))
-                kext_dir.mkdir(parents=True)
-
-            ui(50, f"Downloading {len(kexts)} kexts from GitHub...")
-            log("── Downloading kexts from GitHub...", "header")
+            ui(50, f"{'Verifying' if repair else 'Downloading'} {len(kexts)} kexts...")
+            log(f"── {'Verifying and updating' if repair else 'Downloading'} kexts from GitHub...", "header")
 
             def kext_progress(i, n, msg):
                 pct = 50 + int((i / n) * 30)
                 self.app.call_from_thread(self._status, pct, msg)
                 self.app.call_from_thread(self._log, f"  [{i+1}/{n}] {msg}", "info")
 
-            results = download_kexts(kexts, kext_dir, progress_cb=kext_progress)
+            results = download_kexts(kexts, kext_dir, progress_cb=kext_progress, verify=repair)
             ok_count  = sum(1 for v in results.values() if v.startswith("OK"))
             err_count = sum(1 for v in results.values() if v.startswith("ERROR"))
             log(f"  {ok_count} kexts downloaded successfully", "ok")
@@ -556,65 +552,79 @@ class InstallScreen(Screen):
                     log(f"  WARN: {name} — {result}", "warn")
 
             # ── 8. Download OpenCore ──────────────────────────────────────────
-            ui(82, "Downloading OpenCore...")
-            log("── Downloading OpenCore...", "header")
-            oc_url = "https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
             import urllib.request
-            req = urllib.request.Request(oc_url, headers={"User-Agent": "HackMate/1.0"})
-            with urllib.request.urlopen(req, timeout=15) as r:
-                oc_data = __import__("json").loads(r.read())
+            MIN_EFI = 50 * 1024  # sane minimum — corrupt/truncated files are smaller
+            oc_required = [
+                boot_dir / "BOOTx64.efi",
+                oc_dir   / "OpenCore.efi",
+                driver_dir / "OpenRuntime.efi",
+                driver_dir / "HfsPlus.efi",
+            ]
+            oc_valid = repair and all(
+                f.exists() and f.stat().st_size > MIN_EFI for f in oc_required
+            )
 
-            oc_asset = None
-            for asset in oc_data.get("assets", []):
-                name = asset["name"].lower()
-                if "opencore-" in name and "release" in name and name.endswith(".zip"):
-                    oc_asset = asset
-                    break
-
-            if oc_asset:
-                oc_zip = tmp / oc_asset["name"]
-                urllib.request.urlretrieve(oc_asset["browser_download_url"], str(oc_zip))
-                log(f"  Downloaded {oc_asset['name']}", "ok")
-
-                import zipfile
-                oc_extract = tmp / "oc_extracted"
-                with zipfile.ZipFile(str(oc_zip)) as z:
-                    z.extractall(str(oc_extract))
-
-                # Always use X64 binaries — rglob finds both X64 and IA32; IA32 causes "Unsupported"
-                x64_root = oc_extract / "X64"
-                search_root = x64_root if x64_root.exists() else oc_extract
-
-                for fname, dest in [
-                    ("BOOTx64.efi", boot_dir / "BOOTx64.efi"),
-                    ("OpenCore.efi", oc_dir / "OpenCore.efi"),
-                ]:
-                    found = list(search_root.rglob(fname))
-                    if found:
-                        shutil.copy(str(found[0]), str(dest))
-                        log(f"  {fname} copied", "ok")
-
-                for driver in ["OpenRuntime.efi", "HfsPlus.efi", "ResetNvramEntry.efi"]:
-                    found = list(search_root.rglob(driver))
-                    if found:
-                        shutil.copy(str(found[0]), str(driver_dir / driver))
-                        log(f"  Driver: {driver}", "ok")
-
-                # HfsPlus.efi is not in the OC zip — download from OcBinaryData
-                hfsplus_dest = driver_dir / "HfsPlus.efi"
-                if not hfsplus_dest.exists():
-                    log("  HfsPlus.efi not in OC zip — fetching from OcBinaryData...", "info")
-                    self.app.call_from_thread(self._cmd_log, ["wget", "OcBinaryData/Drivers/HfsPlus.efi"])
-                    hfsplus_url = "https://raw.githubusercontent.com/acidanthera/OcBinaryData/master/Drivers/HfsPlus.efi"
-                    try:
-                        req = urllib.request.Request(hfsplus_url, headers={"User-Agent": "HackMate/1.0"})
-                        with urllib.request.urlopen(req, timeout=15) as r:
-                            hfsplus_dest.write_bytes(r.read())
-                        log("  HfsPlus.efi downloaded", "ok")
-                    except Exception as e:
-                        log(f"  HfsPlus.efi download failed: {e}", "error")
+            if oc_valid:
+                ui(88, "OpenCore files valid — skipping download")
+                log("── OpenCore already valid, skipping download", "ok")
             else:
-                log("  Could not find OpenCore release asset", "error")
+                ui(82, "Downloading OpenCore...")
+                log("── Downloading OpenCore...", "header")
+                oc_url = "https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
+                req = urllib.request.Request(oc_url, headers={"User-Agent": "HackMate/1.0"})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    oc_data = __import__("json").loads(r.read())
+
+                oc_asset = None
+                for asset in oc_data.get("assets", []):
+                    name = asset["name"].lower()
+                    if "opencore-" in name and "release" in name and name.endswith(".zip"):
+                        oc_asset = asset
+                        break
+
+                if oc_asset:
+                    oc_zip = tmp / oc_asset["name"]
+                    urllib.request.urlretrieve(oc_asset["browser_download_url"], str(oc_zip))
+                    log(f"  Downloaded {oc_asset['name']}", "ok")
+
+                    import zipfile
+                    oc_extract = tmp / "oc_extracted"
+                    with zipfile.ZipFile(str(oc_zip)) as z:
+                        z.extractall(str(oc_extract))
+
+                    # Always use X64 binaries — rglob finds both X64 and IA32; IA32 causes "Unsupported"
+                    x64_root = oc_extract / "X64"
+                    search_root = x64_root if x64_root.exists() else oc_extract
+
+                    for fname, fdest in [
+                        ("BOOTx64.efi", boot_dir / "BOOTx64.efi"),
+                        ("OpenCore.efi", oc_dir / "OpenCore.efi"),
+                    ]:
+                        found = list(search_root.rglob(fname))
+                        if found:
+                            shutil.copy(str(found[0]), str(fdest))
+                            log(f"  {fname} copied", "ok")
+
+                    for driver in ["OpenRuntime.efi", "HfsPlus.efi", "ResetNvramEntry.efi"]:
+                        found = list(search_root.rglob(driver))
+                        if found:
+                            shutil.copy(str(found[0]), str(driver_dir / driver))
+                            log(f"  Driver: {driver}", "ok")
+
+                    # HfsPlus.efi is not in the OC zip — download from OcBinaryData
+                    hfsplus_dest = driver_dir / "HfsPlus.efi"
+                    if not hfsplus_dest.exists():
+                        log("  HfsPlus.efi not in OC zip — fetching from OcBinaryData...", "info")
+                        hfsplus_url = "https://raw.githubusercontent.com/acidanthera/OcBinaryData/master/Drivers/HfsPlus.efi"
+                        try:
+                            req = urllib.request.Request(hfsplus_url, headers={"User-Agent": "HackMate/1.0"})
+                            with urllib.request.urlopen(req, timeout=15) as r:
+                                hfsplus_dest.write_bytes(r.read())
+                            log("  HfsPlus.efi downloaded", "ok")
+                        except Exception as e:
+                            log(f"  HfsPlus.efi download failed: {e}", "error")
+                else:
+                    log("  Could not find OpenCore release asset", "error")
 
             # ── 9. SSDTs via SSDTTime ─────────────────────────────────────────
             if repair and acpi_dir.exists():

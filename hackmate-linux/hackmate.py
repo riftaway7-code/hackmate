@@ -376,23 +376,25 @@ class InstallScreen(Screen):
             # ── 1. Format USB ────────────────────────────────────────────────
             ui(2, "Formatting USB as FAT32...")
 
+            import glob, re, time
+
+            # If user selected a partition (sdb1), get the parent disk (sdb)
+            disk = re.sub(r'p?\d+$', '', device) if re.search(r'\d$', device) else device
+
             # Unmount everything on the disk
-            import glob
-            for part in sorted(glob.glob(f"{device}*")):
+            for part in sorted(glob.glob(f"{disk}*")):
                 cmd(["umount", part], capture_output=True)
 
             # Need a real GPT + ESP — UEFI won't boot a raw FAT disk
-            cmd(["parted", "-s", device, "mklabel", "gpt"], check=True, capture_output=True)
-            cmd(["parted", "-s", device, "mkpart", "primary", "fat32", "1MiB", "100%"],
+            cmd(["parted", "-s", disk, "mklabel", "gpt"], check=True, capture_output=True)
+            cmd(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"],
                 check=True, capture_output=True)
-            cmd(["parted", "-s", device, "set", "1", "esp", "on"], capture_output=True)
-            cmd(["partprobe", device], capture_output=True)
+            cmd(["parted", "-s", disk, "set", "1", "esp", "on"], capture_output=True)
+            cmd(["partprobe", disk], capture_output=True)
+            time.sleep(1)
 
-            import time; time.sleep(1)
-
-            # Partition node: sdc→sdc1, nvme0n1→nvme0n1p1
-            import re
-            part_device = re.sub(r'(\d+)$', r'\1p1', device) if device[-1].isdigit() else device + "1"
+            # Partition node: sdb→sdb1, nvme0n1→nvme0n1p1
+            part_device = (disk + "p1") if disk[-1].isdigit() else (disk + "1")
             cmd(["mkfs.fat", "-F32", "-n", "HACKINTOSH", part_device],
                 check=True, capture_output=True)
             log(f"Formatted {part_device} as FAT32 (GPT+ESP)", "ok")

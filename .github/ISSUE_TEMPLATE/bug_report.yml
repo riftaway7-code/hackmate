@@ -47,8 +47,7 @@ body:
     id: config-plist
     attributes:
       label: config.plist
-      description: Paste your config.plist contents here. Please use a code block.
-      render: xml
+      description: Drag and drop your config.plist file here to upload it. If GitHub won't let you upload a .plist file, zip it first and upload the .zip.
     validations:
       required: true
   - type: textarea

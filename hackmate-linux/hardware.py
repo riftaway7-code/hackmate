@@ -73,10 +73,9 @@ INTEL_GENERATIONS = {
     "5926": (7, "Kaby Lake", "Kaby Lake"),
     # Kaby Lake-R / Coffee Lake
     "3e9b": (8, "Coffee Lake", "Coffee Lake"),
-    "3ea0": (8, "Coffee Lake", "Coffee Lake"),
     "87c0": (8, "Kaby Lake-R", "Kaby Lake-R"),
     # Whiskey Lake / Amber Lake
-    "3ea0": (8, "Whiskey Lake", "Whiskey Lake"),
+    "3ea5": (8, "Whiskey Lake", "Whiskey Lake"),
     # Comet Lake
     "9b41": (10, "Comet Lake", "Comet Lake"),
     "9bc8": (10, "Comet Lake", "Comet Lake"),
@@ -220,9 +219,58 @@ def detect_cpu(profile: HardwareProfile):
     elif "amd" in profile.cpu_vendor or "amd" in profile.cpu_name.lower():
         profile.cpu_vendor = "amd"
         name = profile.cpu_name.lower()
-        if "ryzen" in name:
-            profile.cpu_codename = "Zen (Ryzen)"
-            profile.oc_platform = "Ryzen"
+
+        if "ryzen" in name or "threadripper" in name:
+            # Detect Zen architecture from model number.
+            # Ryzen: 1xxx=Zen, 2xxx=Zen+, 3xxx=Zen2, 4xxx=Zen2 APU,
+            #        5xxx=Zen3, 6xxx=Zen3+ APU, 7xxx=Zen4, 8xxx=Zen4 APU, 9xxx=Zen5
+            # Threadripper: 1xxx=Zen, 2xxx=Zen+, 3xxx=Zen2, 5xxx=Zen3, 7xxx=Zen4
+            #
+            # cpu_generation is mapped to an equivalent Intel generation for use
+            # in config_gen.py and kexts.py (SSDT selection, kext selection, quirks).
+            # Per the Dortania guide, AMD has no Intel-style generation restrictions
+            # for macOS compatibility — all Ryzen CPUs support macOS Sierra through
+            # current with appropriate kernel patches.
+            m = re.search(r'(\d{4})', name)
+            if m:
+                model = int(m.group(1))
+                if model >= 9000:
+                    profile.cpu_generation = 12
+                    profile.cpu_codename = "Zen 5"
+                elif model >= 7000:
+                    profile.cpu_generation = 12
+                    profile.cpu_codename = "Zen 4"
+                elif model >= 6000:
+                    profile.cpu_generation = 11
+                    profile.cpu_codename = "Zen 3+"
+                elif model >= 5000:
+                    profile.cpu_generation = 11
+                    profile.cpu_codename = "Zen 3"
+                elif model >= 4000:
+                    profile.cpu_generation = 10
+                    profile.cpu_codename = "Zen 2"
+                elif model >= 3000:
+                    profile.cpu_generation = 10
+                    profile.cpu_codename = "Zen 2"
+                elif model >= 2000:
+                    profile.cpu_generation = 8
+                    profile.cpu_codename = "Zen+"
+                else:
+                    profile.cpu_generation = 8
+                    profile.cpu_codename = "Zen"
+            else:
+                profile.cpu_generation = 8
+                profile.cpu_codename = "Zen (Ryzen)"
+        elif "athlon" in name and ("200" in name or "300" in name):
+            # Athlon 200GE/300GE series are Zen/Zen+ based
+            profile.cpu_generation = 8
+            profile.cpu_codename = "Zen (Athlon)"
+        else:
+            # Unknown AMD CPU — assume Zen or newer
+            profile.cpu_generation = 8
+            profile.cpu_codename = "AMD (unknown)"
+
+        profile.oc_platform = "Ryzen"
 
 
 def detect_platform(profile: HardwareProfile):

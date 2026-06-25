@@ -38,13 +38,19 @@ MACOS_VERSIONS = [
 ]
 
 
-def compatible_versions(cpu_gen: int, gpu_vendor: str) -> list[MacOSVersion]:
+def compatible_versions(cpu_gen: int, gpu_vendor: str, cpu_vendor: str = "intel") -> list[MacOSVersion]:
     result = []
     for v in MACOS_VERSIONS:
-        if cpu_gen < v.min_gen:
-            continue
-        if cpu_gen > v.max_gen:
-            continue
+        # Per the Dortania guide, AMD Ryzen/Threadripper CPUs do not follow
+        # Intel's generation-based macOS compatibility restrictions. All Ryzen
+        # CPUs (Zen through Zen 5) support macOS Sierra through current with
+        # appropriate AMD Vanilla kernel patches. The only hardware filter for
+        # AMD is GPU compatibility (NVIDIA not supported on Mojave+).
+        if cpu_vendor != "amd":
+            if cpu_gen < v.min_gen:
+                continue
+            if cpu_gen > v.max_gen:
+                continue
         if gpu_vendor == "nvidia" and not v.nvidia_ok:
             continue
         result.append(v)
@@ -109,7 +115,7 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
 if __name__ == "__main__":
     from hardware import scan
     profile = scan()
-    versions = compatible_versions(profile.cpu_generation, profile.gpu_vendor)
+    versions = compatible_versions(profile.cpu_generation, profile.gpu_vendor, profile.cpu_vendor)
     print(f"\nCompatible macOS versions for Gen {profile.cpu_generation} {profile.cpu_vendor.upper()} [{profile.gpu_vendor} GPU]:\n")
     for i, v in enumerate(versions):
         note = f"  ({v.notes})" if v.notes else ""

@@ -60,7 +60,7 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "SsdtGpio", 0x00001000)
 }}
 """
 
-def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path) -> bool:
+def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path, ssdt_name: str = "SSDT-GPI0") -> bool:
     try:
         data = dsdt_path.read_bytes()
         for name in (b"GPI0", b"GPIO"):
@@ -72,7 +72,7 @@ def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path) -> boo
 
         gpio_path = f"\\_SB.PCI0.{gpio_name}"
         dsl = GPIO_DSL_TEMPLATE.format(gpio_path=gpio_path)
-        dsl_file = acpi_dir / "SSDT-GPIO.dsl"
+        dsl_file = acpi_dir / f"{ssdt_name}.dsl"
         dsl_file.write_text(dsl)
 
         iasl = ssdttime_dir / "Scripts" / "iasl.exe"
@@ -86,7 +86,7 @@ def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path) -> boo
             dsl_file.unlink()
         except Exception:
             pass
-        return (acpi_dir / "SSDT-GPIO.aml").exists()
+        return (acpi_dir / f"{ssdt_name}.aml").exists()
     except Exception:
         return False
 
@@ -266,12 +266,12 @@ def generate(
     results_dir = script.parent / "Results"
 
     for ssdt in doable:
-        if ssdt == "SSDT-GPIO":
-            cb("Generating SSDT-GPIO...")
-            ok = _build_gpio_ssdt(dsdt, acpi_dir, script.parent)
+        if ssdt in ("SSDT-GPI0", "SSDT-GPIO"):
+            cb(f"Generating {ssdt}...")
+            ok = _build_gpio_ssdt(dsdt, acpi_dir, script.parent, ssdt)
             results[ssdt] = "OK" if ok else "ERROR: GPI0/GPIO device not found in DSDT"
             if ok:
-                cb("  SSDT-GPIO.aml")
+                cb(f"  {ssdt}.aml")
             continue
 
         choice = menu_map.get(ssdt)

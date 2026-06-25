@@ -528,17 +528,21 @@ class InstallScreen(Screen):
                 with zipfile.ZipFile(str(oc_zip)) as z:
                     z.extractall(str(oc_extract))
 
+                # Always use X64 binaries — rglob finds both X64 and IA32; IA32 causes "Unsupported"
+                x64_root = oc_extract / "X64"
+                search_root = x64_root if x64_root.exists() else oc_extract
+
                 for fname, dest in [
                     ("BOOTx64.efi", boot_dir / "BOOTx64.efi"),
                     ("OpenCore.efi", oc_dir / "OpenCore.efi"),
                 ]:
-                    found = list(oc_extract.rglob(fname))
+                    found = list(search_root.rglob(fname))
                     if found:
                         shutil.copy(str(found[0]), str(dest))
                         log(f"  {fname} copied", "ok")
 
                 for driver in ["OpenRuntime.efi", "HfsPlus.efi", "ResetNvramEntry.efi"]:
-                    found = list(oc_extract.rglob(driver))
+                    found = list(search_root.rglob(driver))
                     if found:
                         shutil.copy(str(found[0]), str(driver_dir / driver))
                         log(f"  Driver: {driver}", "ok")

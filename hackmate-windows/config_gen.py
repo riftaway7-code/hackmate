@@ -471,9 +471,6 @@ def _nvram_section(profile: HardwareProfile, layout_id: int) -> dict:
             "4D1EDE05-38C7-4A6A-9CC6-4BCCA8B38C14": [],
             "7C436110-AB2A-4BBB-A880-FE41995C9F82": ["boot-args"],
         },
-        "LegacyEnable":     False,
-        "LegacyOverwrite":  False,
-        "LegacySchema":     {},
         "WriteFlash":       True,
     }
 
@@ -527,7 +524,6 @@ def _uefi_section(profile: HardwareProfile) -> dict:
             "AudioDevice":   "",
             "AudioOutMask":  -1,
             "AudioSupport":  False,
-            "MinimumVolume": 50,
             "PlayChime":     "Disabled",
             "SetupDelay":    0,
         },
@@ -683,7 +679,6 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData) -> dict:
                 "DisplayDelay":       0,
                 "DisplayLevel":       2147483650,
                 "LogModules":         "*",
-                "SerialInit":         False,
                 "SysReport":          False,
                 "Target":             3,
             },

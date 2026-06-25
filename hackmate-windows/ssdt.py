@@ -237,17 +237,14 @@ def generate(
             results[ssdt] = f"ERROR: {e}"
             continue
 
-        found_amls = []
+        found_amls = list(results_dir.rglob("*.aml")) if results_dir.exists() else []
+        if found_amls:
+            dst = acpi_dir / f"{ssdt}.aml"
+            shutil.copy2(str(found_amls[0]), str(dst))
+            cb(f"  {dst.name}")
         if results_dir.exists():
-            for aml in sorted(results_dir.rglob("*.aml")):
-                dst = acpi_dir / aml.name
-                shutil.copy2(str(aml), str(dst))
-                found_amls.append(aml.stem.upper())
-                cb(f"  {aml.name}")
             shutil.rmtree(str(results_dir))
 
-        stem = ssdt.upper()
-        matched = any(stem in a or ssdt.split("-")[1] in a for a in found_amls)
-        results[ssdt] = "OK" if matched else "ERROR: SSDTTime ran but .aml not produced"
+        results[ssdt] = "OK" if found_amls else "ERROR: SSDTTime ran but .aml not produced"
 
     return results

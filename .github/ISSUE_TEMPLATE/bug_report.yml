@@ -54,7 +54,7 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Attach any relevant logs (boot logs, debug logs, etc.). Use a code block or paste a link to a pastebin.
+      description: Attach any relevant logs (boot logs, debug logs, etc.).
       render: shell
     validations:
       required: false

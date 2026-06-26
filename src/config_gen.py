@@ -614,7 +614,7 @@ def _booter_section(profile: HardwareProfile) -> dict:
             "ForceExitBootServices":    False,
             "ProtectMemoryRegions":     False,
             "ProtectSecureBoot":        False,
-            "ProtectUefiServices":      False if profile.cpu_generation < 10 else True,
+            "ProtectUefiServices":      True,
             "ProvideCustomSlide":       True,
             "ProvideMaxSlide":          0,
             "RebuildAppleMemoryMap":    True,

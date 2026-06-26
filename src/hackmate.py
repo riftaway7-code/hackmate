@@ -74,8 +74,10 @@ Button.advanced-btn:hover { color: #00ff88; }
 .cfg-section          { color: #00ff88; height: 1; margin-top: 1; }
 .cfg-label            { color: #aaaaaa; width: 32; content-align: left middle; }
 .cfg-row              { height: 3; align: left middle; }
+.manual-row           { height: 1; align: left middle; }
 Switch                { margin: 0 1 0 0; }
 #editor-scroll        { height: 1fr; border: solid #1a1a1a; }
+#manual-scroll        { height: 1fr; border: solid #1a1a1a; }
 #simple-panel         { height: auto; }
 #advanced-panel       { height: auto; }
 .short-input          { width: 16; }
@@ -386,7 +388,7 @@ class ManualHardwareScreen(Screen):
                         Static("  ── CPU ───────────────────────────────────────", classes="cfg-section"),
                         *[Horizontal(
                             Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
-                            classes="cfg-row",
+                            classes="manual-row",
                         ) for i, (key, label) in enumerate(self.CPU_OPTIONS)],
 
                         Static("  ── Platform ──────────────────────────────────", classes="cfg-section"),
@@ -403,7 +405,7 @@ class ManualHardwareScreen(Screen):
                         Static("  ── GPU ───────────────────────────────────────", classes="cfg-section"),
                         *[Horizontal(
                             Button(("▶ " if i == self._gpu_idx else "  ") + label, id=f"gpu-{key if key else 'auto'}", classes="advanced-btn"),
-                            classes="cfg-row",
+                            classes="manual-row",
                         ) for i, (key, label) in enumerate(self.GPU_OPTIONS)],
 
                         Static("  ── Audio Codec ───────────────────────────────", classes="cfg-section"),
@@ -413,13 +415,13 @@ class ManualHardwareScreen(Screen):
                         Static("  ── Ethernet ──────────────────────────────────", classes="cfg-section"),
                         *[Horizontal(
                             Button(("▶ " if i == self._eth_idx else "  ") + label, id=f"eth-{key if key else 'none'}", classes="advanced-btn"),
-                            classes="cfg-row",
+                            classes="manual-row",
                         ) for i, (key, label) in enumerate(self.ETHERNET_OPTIONS)],
 
                         Static("  ── WiFi ──────────────────────────────────────", classes="cfg-section"),
                         *[Horizontal(
                             Button(("▶ " if i == self._wifi_idx else "  ") + label, id=f"wifi-{key if key else 'none'}", classes="advanced-btn"),
-                            classes="cfg-row",
+                            classes="manual-row",
                         ) for i, (key, label) in enumerate(self.WIFI_OPTIONS)],
 
                         Static("  ── Other ─────────────────────────────────────", classes="cfg-section"),

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HackMate — OpenCore USB Automation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #c8c8c8;
+      font-family: "JetBrains Mono", "Fira Mono", "Consolas", monospace;
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 0 1rem;
+    }
+
+    a { color: #00ff88; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 3rem 0 5rem;
+    }
+
+    /* ── header ── */
+    .header {
+      border-bottom: 1px solid #222;
+      padding-bottom: 2rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .logo {
+      color: #00ff88;
+      font-size: 1.6rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    .tagline {
+      color: #666;
+      margin-top: .4rem;
+    }
+
+    .badges {
+      margin-top: 1rem;
+      display: flex;
+      gap: .6rem;
+      flex-wrap: wrap;
+    }
+
+    .badges img { height: 20px; }
+
+    /* ── section titles ── */
+    .section-title {
+      color: #444;
+      margin: 2.5rem 0 1rem;
+    }
+
+    .section-title::before { content: "── "; color: #00ff88; }
+
+    /* ── terminal block ── */
+    .term {
+      background: #111;
+      border: 1px solid #222;
+      border-left: 3px solid #00ff88;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      margin: .8rem 0;
+    }
+
+    .term .prompt { color: #555; }
+    .term .cmd    { color: #e0e0e0; }
+    .term .out    { color: #666; }
+    .term .ok     { color: #00ff88; }
+    .term .info   { color: #00aaff; }
+
+    /* ── feature list ── */
+    .features li {
+      list-style: none;
+      padding: .2rem 0;
+    }
+    .features li::before { content: "  "; }
+    .features .bullet { color: #00ff88; margin-right: .5rem; }
+
+    /* ── table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: .8rem 0;
+    }
+    th {
+      text-align: left;
+      color: #00ff88;
+      border-bottom: 1px solid #222;
+      padding: .4rem .8rem;
+      font-weight: normal;
+    }
+    td {
+      padding: .35rem .8rem;
+      border-bottom: 1px solid #1a1a1a;
+      color: #999;
+    }
+    tr:hover td { background: #111; }
+
+    /* ── buttons ── */
+    .btns {
+      display: flex;
+      gap: .8rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: .5rem 1.2rem;
+      border: 1px solid #00ff88;
+      color: #00ff88;
+      font-family: inherit;
+      font-size: .85rem;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn:hover { background: #00ff8820; text-decoration: none; }
+
+    .btn-secondary {
+      border-color: #333;
+      color: #666;
+    }
+    .btn-secondary:hover { background: #1a1a1a; color: #999; }
+
+    /* ── faq ── */
+    .faq-q { color: #e0e0e0; margin-top: 1.2rem; }
+    .faq-q::before { content: "Q  "; color: #00ff88; }
+    .faq-a { color: #666; margin-left: 1.5rem; }
+    .faq-a::before { content: "A  "; color: #444; }
+
+    /* ── footer ── */
+    .footer {
+      border-top: 1px solid #1a1a1a;
+      margin-top: 4rem;
+      padding-top: 1.5rem;
+      color: #333;
+      font-size: .8rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- header -->
+  <div class="header">
+    <div class="logo">HackMate</div>
+    <div class="tagline">Automates the entire OpenCore hackintosh USB process. No manual config.plist editing.</div>
+    <div class="badges">
+      <img src="https://img.shields.io/github/stars/riftaway7-code/hackmate?style=flat&color=gold" alt="stars" />
+      <img src="https://img.shields.io/github/v/release/riftaway7-code/hackmate?style=flat&color=00ff88" alt="version" />
+      <img src="https://img.shields.io/github/license/riftaway7-code/hackmate?style=flat&color=555" alt="license" />
+    </div>
+    <div class="btns">
+      <a class="btn" href="https://github.com/riftaway7-code/hackmate/releases/latest">Download EXE (Windows)</a>
+      <a class="btn btn-secondary" href="https://github.com/riftaway7-code/hackmate">⭐ Star on GitHub</a>
+    </div>
+  </div>
+
+  <!-- what it does -->
+  <div class="section-title">What it does</div>
+  <ul class="features">
+    <li><span class="bullet">→</span> Scans CPU, GPU, audio, ethernet, WiFi, NVMe, Thunderbolt</li>
+    <li><span class="bullet">→</span> Shows compatible macOS versions for your hardware</li>
+    <li><span class="bullet">→</span> Formats USB, downloads macOS recovery directly from Apple</li>
+    <li><span class="bullet">→</span> Generates SMBIOS, config.plist, SSDTs, kexts automatically</li>
+    <li><span class="bullet">→</span> Built-in config.plist editor with iGPU framebuffer + audio layout suggestions</li>
+    <li><span class="bullet">→</span> Uses the exact same tools as the Dortania guide — no special tricks</li>
+  </ul>
+
+  <!-- install -->
+  <div class="section-title">Install</div>
+
+  <div class="term">
+    <div><span class="info">Windows</span> — download and run as Administrator:</div>
+    <div style="margin-top:.5rem">
+      <a class="ok" href="https://github.com/riftaway7-code/hackmate/releases/latest">→ HackMate.exe</a>
+    </div>
+  </div>
+
+  <div class="term">
+    <div><span class="info">Linux / macOS</span></div>
+    <div style="margin-top:.5rem">
+      <div><span class="prompt">$ </span><span class="cmd">git clone https://github.com/riftaway7-code/hackmate.git</span></div>
+      <div><span class="prompt">$ </span><span class="cmd">cd hackmate && python3 setup.py</span></div>
+      <div><span class="prompt">$ </span><span class="cmd">sudo .venv/bin/python3 src/hackmate.py</span></div>
+    </div>
+  </div>
+
+  <!-- supported hardware -->
+  <div class="section-title">Supported hardware</div>
+  <table>
+    <tr><th>Platform</th><th>Details</th><th>macOS</th></tr>
+    <tr><td>Intel 2nd–10th gen</td><td>Sandy Bridge → Comet Lake, laptop + desktop</td><td>Lion → Tahoe</td></tr>
+    <tr><td>AMD Ryzen / Threadripper</td><td>Zen, Zen+, Zen 2, Zen 3, Zen 4, Zen 5</td><td>Catalina → Tahoe</td></tr>
+    <tr><td>Intel WiFi</td><td>AX200, AX210, AC-9260 + more via itlwm / AirportItlwm</td><td>—</td></tr>
+    <tr><td>Realtek / Intel ethernet</td><td>RTL8111, RTL8125, I219, I225, I226</td><td>—</td></tr>
+  </table>
+
+  <!-- faq -->
+  <div class="section-title">FAQ</div>
+
+  <div class="faq-q">My antivirus flagged HackMate.exe</div>
+  <div class="faq-a">False positive — PyInstaller-bundled executables trigger heuristic scanners. Every major AV (Defender, Kaspersky, ESET, CrowdStrike) reports clean. The EXE is built transparently on <a href="https://github.com/riftaway7-code/hackmate/actions/workflows/build-exe.yml">GitHub Actions</a> from this source code.</div>
+
+  <div class="faq-q">Does it work on Alpine / musl libc?</div>
+  <div class="faq-a">Yes — it's pure Python with no native extensions that would break on musl.</div>
+
+  <div class="faq-q">Is it safe to run?</div>
+  <div class="faq-a">It only touches your target USB drive. Internal disks are hidden from the device list. Source is fully open on GitHub.</div>
+
+  <div class="faq-q">Do I still need to follow the Dortania guide?</div>
+  <div class="faq-a">HackMate automates the Dortania guide steps using the same tools (macrecovery, SSDTTime, OpenCore). Reading the guide is still useful for understanding what's happening, but you don't need to run any of it manually.</div>
+
+  <!-- footer -->
+  <div class="footer">
+    MIT License · <a href="https://github.com/riftaway7-code/hackmate">github.com/riftaway7-code/hackmate</a> · <a href="https://github.com/riftaway7-code/hackmate/blob/main/SECURITY.md">Security Policy</a>
+  </div>
+
+</div>
+</body>
+</html>

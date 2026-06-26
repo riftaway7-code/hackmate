@@ -839,7 +839,7 @@ class InstallScreen(Screen):
             # HeliPort — download alongside itlwm so user has it ready on the USB
             if self.app.wifi_kext_mode == "itlwm":
                 from kexts import download_heliport
-                extras_dir = mount / "EFI" / "HackMate-Extras"
+                extras_dir = Path(mount) / "EFI" / "HackMate-Extras"
                 ok = download_heliport(
                     extras_dir,
                     progress_cb=lambda m: self.app.call_from_thread(log, f"  {m}", "info")

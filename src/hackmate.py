@@ -71,13 +71,14 @@ Button.advanced-btn:hover { color: #00ff88; }
 .hw-row               { margin-bottom: 0; }
 .hw-key               { color: #555555; width: 12; }
 .hw-val               { color: #cccccc; }
-.cfg-section          { color: #00ff88; margin-top: 1; margin-bottom: 1; }
-.cfg-label            { color: #aaaaaa; width: 36; content-align: left middle; height: 3; }
-.cfg-row              { margin-bottom: 1; height: 3; align: left middle; }
-.cfg-mode-bar         { height: 3; align: left middle; }
-Switch                { margin: 0 1 0 0; height: 3; }
+.cfg-section          { color: #00ff88; margin-top: 1; margin-bottom: 0; }
+.cfg-label            { color: #aaaaaa; width: 32; content-align: left middle; height: 1; }
+.cfg-row              { height: 1; align: left middle; margin-bottom: 0; }
+Switch                { margin: 0 1 0 0; height: 1; }
 #editor-scroll        { height: 1fr; border: solid #1a1a1a; }
-.short-input          { width: 20; }
+#simple-panel         { height: auto; }
+#advanced-panel       { height: auto; }
+.short-input          { width: 16; height: 1; }
 """
 
 BANNER = (
@@ -1131,23 +1132,20 @@ class ConfigEditorScreen(Screen):
                 ScrollableContainer(
                     # ── Simple mode ──────────────────────────────────────
                     Vertical(
-                        Static("  ── Boot Args ──────────────────────────────────────────", classes="cfg-section"),
-                        Horizontal(Static("  Verbose (-v)",              classes="cfg-label"), Switch(value="-v" in args,              id="sw-verbose"),   classes="cfg-row"),
-                        Horizontal(Static("  No compat check",           classes="cfg-label"), Switch(value="-no_compat_check" in args, id="sw-nocompat"),  classes="cfg-row"),
-                        Horizontal(Static("  Debug logging",             classes="cfg-label"), Switch(value="debug" in args,           id="sw-debug"),     classes="cfg-row"),
-                        Horizontal(Static("  Audio layout (alcid)",      classes="cfg-label"), Input(value=alcid_val, placeholder="e.g. 11", id="in-alcid", classes="short-input"), classes="cfg-row"),
-                        Static(""),
-                        Static("  ── OpenCore ────────────────────────────────────────────", classes="cfg-section"),
-                        Horizontal(Static("  Picker timeout (sec)",      classes="cfg-label"), Input(value=timeout_val, placeholder="5", id="in-timeout", classes="short-input"), classes="cfg-row"),
-                        Horizontal(Static("  Show recovery in picker",   classes="cfg-label"), Switch(value=not get_hide_auxiliary(cfg), id="sw-recovery"), classes="cfg-row"),
-                        Horizontal(Static("  OC file logging",           classes="cfg-label"), Switch(value=get_oc_logging(cfg),        id="sw-oclog"),    classes="cfg-row"),
-                        Static(""),
-                        Static("  ── Security ────────────────────────────────────────────", classes="cfg-section"),
-                        Horizontal(Static("  SIP enabled",               classes="cfg-label"), Switch(value=get_sip_enabled(cfg),      id="sw-sip"),      classes="cfg-row"),
-                        Horizontal(Static("  SecureBootModel",           classes="cfg-label"), Input(value=sbm_val, placeholder="Disabled", id="in-sbm", classes="short-input"), classes="cfg-row"),
-                        Static(""),
-                        Static("  ── System ──────────────────────────────────────────────", classes="cfg-section"),
-                        Horizontal(Static("  SMBIOS model",              classes="cfg-label"), Input(value=smbios_val, placeholder="MacBookPro15,2", id="in-smbios"), classes="cfg-row"),
+                        Static("  ── Boot Args ─────────────────────────────", classes="cfg-section"),
+                        Horizontal(Static("  Verbose (-v)",         classes="cfg-label"), Switch(value="-v" in args,              id="sw-verbose"),  classes="cfg-row"),
+                        Horizontal(Static("  No compat check",      classes="cfg-label"), Switch(value="-no_compat_check" in args,id="sw-nocompat"), classes="cfg-row"),
+                        Horizontal(Static("  Debug logging",        classes="cfg-label"), Switch(value="debug" in args,           id="sw-debug"),    classes="cfg-row"),
+                        Horizontal(Static("  alcid (audio layout)", classes="cfg-label"), Input(value=alcid_val, placeholder="11", id="in-alcid", classes="short-input"), classes="cfg-row"),
+                        Static("  ── OpenCore ──────────────────────────────", classes="cfg-section"),
+                        Horizontal(Static("  Picker timeout (sec)", classes="cfg-label"), Input(value=timeout_val, placeholder="5", id="in-timeout", classes="short-input"), classes="cfg-row"),
+                        Horizontal(Static("  Show recovery",        classes="cfg-label"), Switch(value=not get_hide_auxiliary(cfg), id="sw-recovery"),classes="cfg-row"),
+                        Horizontal(Static("  OC file logging",      classes="cfg-label"), Switch(value=get_oc_logging(cfg),        id="sw-oclog"),   classes="cfg-row"),
+                        Static("  ── Security ──────────────────────────────", classes="cfg-section"),
+                        Horizontal(Static("  SIP enabled",          classes="cfg-label"), Switch(value=get_sip_enabled(cfg),       id="sw-sip"),     classes="cfg-row"),
+                        Horizontal(Static("  SecureBootModel",      classes="cfg-label"), Input(value=sbm_val, placeholder="Disabled", id="in-sbm", classes="short-input"), classes="cfg-row"),
+                        Static("  ── System ────────────────────────────────", classes="cfg-section"),
+                        Horizontal(Static("  SMBIOS model",         classes="cfg-label"), Input(value=smbios_val, placeholder="MacBookPro15,2", id="in-smbios"), classes="cfg-row"),
                         id="simple-panel"
                     ),
                     # ── Advanced mode ─────────────────────────────────────

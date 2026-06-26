@@ -1,6 +1,6 @@
 """
 Auto-updater for HackMate.
-Checks GitHub for new commits and downloads updated .py files in-place.
+Checks GitHub for new commits, shows changelog, asks user before updating.
 """
 
 import os
@@ -9,10 +9,10 @@ import urllib.request
 import json
 from pathlib import Path
 
-REPO       = "riftaway7-code/hackmate"
-BRANCH     = "main"
-RAW_BASE   = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/src"
-API_URL    = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
+REPO         = "riftaway7-code/hackmate"
+BRANCH       = "main"
+API_URL      = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
+COMPARE_URL  = f"https://api.github.com/repos/{REPO}/compare/{{base}}...{{head}}"
 VERSION_FILE = Path(__file__).parent / ".version"
 
 FILES = [
@@ -29,13 +29,18 @@ FILES = [
 ]
 
 
-def _get_remote_sha() -> str | None:
+def _get(url: str) -> dict | list | None:
     try:
-        req = urllib.request.Request(API_URL, headers={"User-Agent": "HackMate/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "HackMate/1.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
-            return json.loads(r.read())["sha"]
+            return json.loads(r.read())
     except Exception:
         return None
+
+
+def _get_remote_sha() -> str | None:
+    data = _get(API_URL)
+    return data["sha"] if data else None
 
 
 def _get_local_sha() -> str | None:
@@ -43,6 +48,21 @@ def _get_local_sha() -> str | None:
         return VERSION_FILE.read_text().strip()
     except Exception:
         return None
+
+
+def _get_changelog(base_sha: str, head_sha: str) -> list[str]:
+    """Return list of commit messages between base and head."""
+    if not base_sha:
+        return []
+    data = _get(COMPARE_URL.format(base=base_sha, head=head_sha))
+    if not data or "commits" not in data:
+        return []
+    messages = []
+    for commit in reversed(data["commits"]):
+        msg = commit.get("commit", {}).get("message", "").splitlines()[0].strip()
+        if msg:
+            messages.append(msg)
+    return messages
 
 
 def _download_file(filename: str, sha: str) -> bool:
@@ -58,43 +78,57 @@ def _download_file(filename: str, sha: str) -> bool:
 
 
 def check_and_update(silent: bool = False) -> bool:
-    if not silent:
-        print("Checking for updates...", end=" ", flush=True)
+    print("Checking for updates...", end=" ", flush=True)
 
     remote_sha = _get_remote_sha()
     if not remote_sha:
-        if not silent:
-            print("(offline, skipping)")
+        print("(offline, skipping)")
         return False
 
-    base_dir = Path(__file__).parent
-    local_sha = _get_local_sha()
-    missing = [f for f in FILES if not (base_dir / f).exists()]
+    local_sha  = _get_local_sha()
+    base_dir   = Path(__file__).parent
+    missing    = [f for f in FILES if not (base_dir / f).exists()]
 
     if remote_sha == local_sha and not missing:
-        if not silent:
-            print("up to date.")
+        print("up to date.")
         return False
 
-    if not silent:
-        short = remote_sha[:7]
-        print(f"update found ({short}), downloading...")
+    short = remote_sha[:7]
+    print(f"new version available ({short})\n")
 
+    # Show changelog
+    changelog = _get_changelog(local_sha, remote_sha) if local_sha else []
+    if changelog:
+        print("  What's new:")
+        for msg in changelog:
+            print(f"    • {msg}")
+    else:
+        print("  (changelog unavailable)")
+    print()
+
+    # Ask user
+    try:
+        ans = input("  Update now? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  Skipping update.")
+        return False
+
+    if ans in ("n", "no"):
+        print("  Skipping update.\n")
+        return False
+
+    print()
     failed = []
     for filename in FILES:
         ok = _download_file(filename, remote_sha)
-        if not silent:
-            status = "✓" if ok else "✗"
-            print(f"  {status} {filename}")
+        print(f"  {'✓' if ok else '✗'} {filename}")
         if not ok:
             failed.append(filename)
 
     VERSION_FILE.write_text(remote_sha)
 
-    if failed and not silent:
-        print(f"  Warning: {len(failed)} file(s) failed to update: {', '.join(failed)}")
+    if failed:
+        print(f"\n  Warning: {len(failed)} file(s) failed: {', '.join(failed)}")
 
-    if not silent:
-        print("Update complete — restarting...\n")
-
+    print("\n  Update complete — restarting...\n")
     return True

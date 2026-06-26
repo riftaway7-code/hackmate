@@ -215,6 +215,63 @@ def set_igpu_platform_id(cfg: dict, hex_str: str) -> None:
     cfg["DeviceProperties"]["Add"][_IGPU_PATH]["AAPL,ig-platform-id"] = bytes.fromhex(hex_str)
 
 
+# ─── Audio layout suggestions ────────────────────────────────────────────────
+
+# AppleALC supported layouts per codec — most common/reliable ones only
+AUDIO_LAYOUTS: dict[str, list[tuple[int, str]]] = {
+    "ALC256":  [(21, "most laptops"), (11, "alt"), (13, "alt")],
+    "ALC257":  [(21, "most laptops"), (11, "alt"), (99, "alt")],
+    "ALC255":  [(71, "most laptops"), (53, "alt"), (96, "alt")],
+    "ALC269":  [(11, "most laptops"), (21, "alt"), (29, "ThinkPad"), (76, "Dell"), (88, "HP")],
+    "ALC295":  [(28, "most laptops"), (77, "alt"), (88, "alt")],
+    "ALC298":  [(47, "most laptops"), (72, "alt"), (28, "ThinkPad")],
+    "ALC285":  [(21, "most laptops"), (61, "alt"), (71, "alt")],
+    "ALC294":  [(21, "most laptops"), (97, "alt")],
+    "ALC236":  [(14, "most laptops"), (36, "alt"), (100, "alt")],
+    "ALC282":  [(25, "most laptops"), (27, "alt")],
+    "ALC283":  [(66, "most laptops"), (13, "alt")],
+    "ALC289":  [(87, "most laptops"), (93, "alt")],
+    "ALC1220": [(7, "most desktops"), (11, "alt"), (16, "Gigabyte")],
+    "ALC887":  [(7, "most desktops"), (11, "alt"), (17, "alt")],
+    "ALC892":  [(7, "most desktops"), (12, "alt"), (15, "alt")],
+    "ALC897":  [(11, "most desktops"), (66, "alt")],
+}
+
+
+def suggest_audio_layouts(codec: str) -> list[tuple[int, str]]:
+    """Return list of (layout_id, description) for the given audio codec."""
+    codec = codec.upper()
+    for key, layouts in AUDIO_LAYOUTS.items():
+        if key in codec:
+            return layouts
+    return []
+
+
+# ─── dGPU disabling ───────────────────────────────────────────────────────────
+
+_DGPU_PATH = "PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0)"
+
+
+def get_dgpu_disabled(cfg: dict) -> bool:
+    try:
+        return cfg["DeviceProperties"]["Add"][_DGPU_PATH].get("disable-gpu") == bytes([1, 0, 0, 0])
+    except (KeyError, TypeError):
+        return False
+
+
+def set_dgpu_disabled(cfg: dict, disabled: bool) -> None:
+    dp = cfg.setdefault("DeviceProperties", {}).setdefault("Add", {})
+    if disabled:
+        dp.setdefault(_DGPU_PATH, {})["disable-gpu"] = bytes([1, 0, 0, 0])
+        dp[_DGPU_PATH]["name"] = "Disabled"
+    else:
+        if _DGPU_PATH in dp:
+            dp[_DGPU_PATH].pop("disable-gpu", None)
+            dp[_DGPU_PATH].pop("name", None)
+            if not dp[_DGPU_PATH]:
+                del dp[_DGPU_PATH]
+
+
 # ─── Boot-arg presets ─────────────────────────────────────────────────────────
 
 BOOT_ARG_PRESETS: dict[str, dict[str, str | bool]] = {

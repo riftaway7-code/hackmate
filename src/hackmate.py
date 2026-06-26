@@ -416,13 +416,20 @@ class WiFiKextScreen(Screen):
         )
         yield Footer()
 
+    def _next(self) -> None:
+        profile: HardwareProfile = self.app.profile
+        if getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel":
+            self.app.push_screen(DGPUScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+        else:
+            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "itlwm":
             self.app.wifi_kext_mode = "itlwm"
-            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+            self._next()
         elif event.button.id == "airportitlwm":
             self.app.wifi_kext_mode = "AirportItlwm"
-            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+            self._next()
         elif event.button.id == "back":
             self.app.pop_screen()
 
@@ -454,8 +461,11 @@ class BuildModeScreen(Screen):
 
     def _next_screen(self, repair: bool, skip_format: bool) -> None:
         profile: HardwareProfile = self.app.profile
+        has_dgpu = getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel"
         if getattr(profile, "wifi_chipset", "") == "intel":
             self.app.push_screen(WiFiKextScreen(self.device, repair=repair, skip_format=skip_format))
+        elif has_dgpu:
+            self.app.push_screen(DGPUScreen(self.device, repair=repair, skip_format=skip_format))
         else:
             self.app.push_screen(ConfirmScreen(self.device, repair=repair, skip_format=skip_format))
 
@@ -466,6 +476,57 @@ class BuildModeScreen(Screen):
             self._next_screen(repair=False, skip_format=True)
         elif event.button.id == "repair":
             self._next_screen(repair=True, skip_format=False)
+        elif event.button.id == "back":
+            self.app.pop_screen()
+
+
+# ─── dGPU Screen ─────────────────────────────────────────────────────────────
+
+class DGPUScreen(Screen):
+    """Ask user whether to disable discrete GPU for macOS (Optimus laptops)."""
+    def __init__(self, device: str, repair: bool, skip_format: bool):
+        super().__init__()
+        self.device      = device
+        self.repair      = repair
+        self.skip_format = skip_format
+
+    def compose(self) -> ComposeResult:
+        profile: HardwareProfile = self.app.profile
+        dgpu   = getattr(profile, "dgpu_name",   "Discrete GPU")
+        vendor = getattr(profile, "dgpu_vendor",  "nvidia")
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Discrete GPU Detected ───────────────────────────────", classes="title"),
+                Static(""),
+                Static(f"  {dgpu}", classes="info"),
+                Static(""),
+                Static("  macOS does not support Optimus (Intel + Nvidia/AMD switching).", classes="info"),
+                Static("  The discrete GPU must be disabled, otherwise you will get:", classes="info"),
+                Static("    • Black screen on boot", classes="info"),
+                Static("    • Reduced battery life", classes="info"),
+                Static("    • System instability", classes="info"),
+                Static(""),
+                Static("  Disable via DeviceProperties (recommended)?", classes="info"),
+                Static("  This adds 'disable-gpu' to your config.plist for the dGPU path.", classes="info"),
+                Static(""),
+                Static("  Note: You can also disable it in BIOS under 'Switchable Graphics'.", classes="info"),
+                Static(""),
+                Button("Yes — disable in config.plist",  id="disable",  classes="primary"),
+                Button("No — I'll handle it myself",     id="skip",     classes="back"),
+                Button("← Back",                         id="back",     classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "disable":
+            self.app.disable_dgpu = True
+            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+        elif event.button.id == "skip":
+            self.app.disable_dgpu = False
+            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
         elif event.button.id == "back":
             self.app.pop_screen()
 
@@ -809,6 +870,10 @@ class InstallScreen(Screen):
             log("── Generating config.plist...", "header")
             from config_gen import generate as gen_config, write_plist, _required_ssdts
             config = gen_config(profile, smbios)
+            if self.app.disable_dgpu:
+                from config_editor import set_dgpu_disabled
+                set_dgpu_disabled(config, True)
+                log("  dGPU disabled in DeviceProperties", "ok")
             config_path = oc_dir / "config.plist"
             write_plist(config, config_path)
             log(f"  config.plist written ({config_path.stat().st_size} bytes)", "ok")
@@ -1114,6 +1179,7 @@ class ConfigEditorScreen(Screen):
             get_boot_args, get_sip_enabled, get_hide_auxiliary,
             get_timeout, get_oc_logging, get_secure_boot_model, get_smbios,
             get_igpu_platform_id, suggest_framebuffers, BOOT_ARG_PRESETS,
+            suggest_audio_layouts, get_dgpu_disabled,
         )
         cfg     = self._cfg
         args    = get_boot_args(cfg)
@@ -1129,6 +1195,15 @@ class ConfigEditorScreen(Screen):
         fb_opts   = suggest_framebuffers(gpu_id)
         cur_fb    = get_igpu_platform_id(cfg)
         gpu_label = getattr(profile, "gpu_name", "") if profile else ""
+
+        # audio suggestions
+        codec      = getattr(profile, "audio_codec", "") if profile else ""
+        alc_opts   = suggest_audio_layouts(codec)
+
+        # dGPU
+        dgpu_name   = getattr(profile, "dgpu_name",   "") if profile else ""
+        dgpu_vendor = getattr(profile, "dgpu_vendor",  "") if profile else ""
+        has_dgpu    = bool(dgpu_vendor and getattr(profile, "gpu_vendor", "") == "intel")
 
         yield Header()
         yield Container(
@@ -1151,6 +1226,11 @@ class ConfigEditorScreen(Screen):
                         Horizontal(Static("  No compat check",      classes="cfg-label"), Switch(value="-no_compat_check" in args,id="sw-nocompat"), classes="cfg-row"),
                         Horizontal(Static("  Debug logging",        classes="cfg-label"), Switch(value="debug" in args,           id="sw-debug"),    classes="cfg-row"),
                         Horizontal(Static("  alcid (audio layout)", classes="cfg-label"), Input(value=alcid_val, placeholder="11", id="in-alcid", classes="short-input"), classes="cfg-row"),
+                        *(
+                            [Static(f"  Suggestions for {codec}: " + "  ".join(f"[{lid}] {desc}" for lid, desc in alc_opts), classes="info")]
+                            if alc_opts else []
+                        ),
+                        *([Static(f"  Quick set:", classes="info"), Horizontal(*[Button(str(lid), id=f"alcid-{lid}", classes="advanced-btn") for lid, _ in alc_opts[:4]], classes="cfg-row")] if alc_opts else []),
                         Static("  ── OpenCore ──────────────────────────────", classes="cfg-section"),
                         Horizontal(Static("  Picker timeout (sec)", classes="cfg-label"), Input(value=timeout_val, placeholder="5", id="in-timeout", classes="short-input"), classes="cfg-row"),
                         Horizontal(Static("  Show recovery",        classes="cfg-label"), Switch(value=not get_hide_auxiliary(cfg), id="sw-recovery"),classes="cfg-row"),
@@ -1160,6 +1240,13 @@ class ConfigEditorScreen(Screen):
                         Horizontal(Static("  SecureBootModel",      classes="cfg-label"), Input(value=sbm_val, placeholder="Disabled", id="in-sbm", classes="short-input"), classes="cfg-row"),
                         Static("  ── System ────────────────────────────────", classes="cfg-section"),
                         Horizontal(Static("  SMBIOS model",         classes="cfg-label"), Input(value=smbios_val, placeholder="MacBookPro15,2", id="in-smbios"), classes="cfg-row"),
+                        *(
+                            [
+                                Static("  ── Discrete GPU ──────────────────────────", classes="cfg-section"),
+                                Static(f"  {dgpu_name}", classes="info"),
+                                Horizontal(Static("  Disable dGPU (Optimus fix)", classes="cfg-label"), Switch(value=get_dgpu_disabled(cfg), id="sw-dgpu"), classes="cfg-row"),
+                            ] if has_dgpu else []
+                        ),
                         *(
                             [
                                 Static("  ── iGPU Framebuffer ──────────────────────", classes="cfg-section"),
@@ -1224,6 +1311,11 @@ class ConfigEditorScreen(Screen):
             self.query_one("#mode-toggle", Button).label = (
                 "Switch to Simple mode" if self._mode == "advanced" else "Switch to Advanced mode"
             )
+
+        elif bid.startswith("alcid-"):
+            layout_id = bid.split("-")[1]
+            self.query_one("#in-alcid", Input).value = layout_id
+            self.query_one("#save-status", Static).update(f"  alcid set to {layout_id} — save to write.")
 
         elif bid.startswith("preset-"):
             from config_editor import get_boot_args, set_boot_args, BOOT_ARG_PRESETS
@@ -1290,7 +1382,7 @@ class ConfigEditorScreen(Screen):
         from config_editor import (
             get_boot_args, set_boot_args, set_sip, set_hide_auxiliary,
             set_timeout, set_oc_logging, set_secure_boot_model, set_smbios,
-            set_igpu_platform_id,
+            set_igpu_platform_id, set_dgpu_disabled,
         )
         cfg  = self._cfg
         args = get_boot_args(cfg)
@@ -1357,6 +1449,11 @@ class ConfigEditorScreen(Screen):
                 set_igpu_platform_id(cfg, fb)
             except Exception:
                 pass
+
+        try:
+            set_dgpu_disabled(cfg, sw("#sw-dgpu"))
+        except Exception:
+            pass
 
 
 # ─── BIOS Checklist ──────────────────────────────────────────────────────────
@@ -1435,6 +1532,7 @@ class HackMate(App):
     profile:        HardwareProfile | None = None
     macos_version:  MacOSVersion   | None = None
     wifi_kext_mode: str                   = "itlwm"
+    disable_dgpu:   bool                  = False
 
     def on_mount(self) -> None:
         self.push_screen(WelcomeScreen())

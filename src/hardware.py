@@ -19,6 +19,9 @@ class HardwareProfile:
     gpu_device_id: str = ""
     gpu_subsystem: str = ""
 
+    dgpu_name: str = ""
+    dgpu_vendor: str = ""     # nvidia / amd — only set when discrete GPU alongside Intel iGPU
+
     audio_name: str = ""
     audio_codec: str = ""     # e.g. ALC295
 
@@ -441,25 +444,46 @@ def _detect_gpu_linux(profile: HardwareProfile):
                 profile.gpu_name = _extract_device_name(line)
                 profile.gpu_device_id = ids
             elif "1002" in ids or "amd" in lower or "radeon" in lower:
-                profile.gpu_vendor = "amd"
-                profile.gpu_name = _extract_device_name(line)
-                profile.gpu_device_id = ids
+                if profile.gpu_vendor == "intel":
+                    profile.dgpu_vendor = "amd"
+                    profile.dgpu_name = _extract_device_name(line)
+                else:
+                    profile.gpu_vendor = "amd"
+                    profile.gpu_name = _extract_device_name(line)
+                    profile.gpu_device_id = ids
             elif "10de" in ids or "nvidia" in lower or "geforce" in lower:
-                profile.gpu_vendor = "nvidia"
-                profile.gpu_name = _extract_device_name(line)
-                profile.gpu_device_id = ids
+                if profile.gpu_vendor == "intel":
+                    profile.dgpu_vendor = "nvidia"
+                    profile.dgpu_name = _extract_device_name(line)
+                else:
+                    profile.gpu_vendor = "nvidia"
+                    profile.gpu_name = _extract_device_name(line)
+                    profile.gpu_device_id = ids
 
 
 def _detect_gpu_windows(profile: HardwareProfile):
-    raw = _ps("(Get-WmiObject Win32_VideoController | Select-Object -First 1).Name")
-    profile.gpu_name = raw.strip()
+    raw = _ps("(Get-WmiObject Win32_VideoController).Name -join '||'").strip()
+    gpus = [g.strip() for g in raw.split("||") if g.strip()]
 
-    if "intel" in raw.lower():
-        profile.gpu_vendor = "intel"
-    elif "amd" in raw.lower() or "radeon" in raw.lower():
-        profile.gpu_vendor = "amd"
-    elif "nvidia" in raw.lower():
-        profile.gpu_vendor = "nvidia"
+    for name in gpus:
+        lower = name.lower()
+        if "intel" in lower:
+            profile.gpu_vendor = "intel"
+            profile.gpu_name = name
+        elif "nvidia" in lower or "geforce" in lower or "quadro" in lower:
+            if profile.gpu_vendor == "intel":
+                profile.dgpu_vendor = "nvidia"
+                profile.dgpu_name = name
+            else:
+                profile.gpu_vendor = "nvidia"
+                profile.gpu_name = name
+        elif "amd" in lower or "radeon" in lower:
+            if profile.gpu_vendor == "intel":
+                profile.dgpu_vendor = "amd"
+                profile.dgpu_name = name
+            else:
+                profile.gpu_vendor = "amd"
+                profile.gpu_name = name
 
     pnp = _ps("(Get-WmiObject Win32_VideoController | Select-Object -First 1).PNPDeviceID")
     m = re.search(r"DEV_([0-9A-Fa-f]{4})", pnp)

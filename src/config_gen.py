@@ -3,7 +3,7 @@ from pathlib import Path
 from hardware import HardwareProfile
 from kexts import KextEntry, select_kexts, get_alc_layout
 from smbios import SMBIOSData
-from platform import IS_WINDOWS, dmi_vendor, cpu_core_count
+from compat import IS_WINDOWS, dmi_vendor, cpu_core_count
 
 
 # ─── iGPU framebuffer platform-ids (little-endian bytes) ─────────────────────

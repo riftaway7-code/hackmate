@@ -25,7 +25,7 @@ FILES = [
     "ssdt.py",
     "updater.py",
     "efi_check.py",
-    "platform.py",
+    "compat.py",
 ]
 
 

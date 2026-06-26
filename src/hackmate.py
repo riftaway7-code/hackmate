@@ -6,7 +6,7 @@ import shlex
 import json
 from pathlib import Path
 
-from platform import require_admin, IS_WINDOWS, get_usb_drives, format_usb, mount_usb, unmount_usb, get_mount_path, get_tmp_dir
+from compat import require_admin, IS_WINDOWS, get_usb_drives, format_usb, mount_usb, unmount_usb, get_mount_path, get_tmp_dir
 require_admin()
 
 from updater import check_and_update

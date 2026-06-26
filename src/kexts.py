@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 from hardware import HardwareProfile
-from platform import IS_WINDOWS
+from compat import IS_WINDOWS
 
 
 @dataclass

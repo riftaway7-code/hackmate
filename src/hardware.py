@@ -1,7 +1,7 @@
 import subprocess
 import re
 from dataclasses import dataclass, field
-from platform import IS_WINDOWS, IS_LINUX
+from compat import IS_WINDOWS, IS_LINUX
 
 
 @dataclass
@@ -356,7 +356,7 @@ def _detect_platform_linux(profile: HardwareProfile):
         or any("i2c" in l.lower() and ("hid" in l.lower() or "touch" in l.lower()) for l in profile.raw_pci)
     )
 
-    from platform import detect_touchpad_type
+    from compat import detect_touchpad_type
     profile.touchpad_type = detect_touchpad_type()
 
 
@@ -390,7 +390,7 @@ def _detect_platform_windows(profile: HardwareProfile):
     except Exception:
         profile.has_thunderbolt = False
 
-    from platform import detect_touchpad_type
+    from compat import detect_touchpad_type
     profile.touchpad_type = detect_touchpad_type()
     profile.has_touchpad = profile.touchpad_type != "none"
 

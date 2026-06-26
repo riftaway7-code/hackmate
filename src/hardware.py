@@ -59,7 +59,14 @@ def _ps(command: str) -> str:
 
 
 def _lspci() -> list[str]:
-    return _run(["lspci", "-nn"]).splitlines()
+    import platform
+    if platform.system() == "Darwin":
+        raw = _run(["system_profiler", "SPPCIDataType"])
+        return raw.splitlines()
+    out = _run(["lspci", "-nn"])
+    if not out and platform.system() == "Linux":
+        out = _run(["lspci"])
+    return out.splitlines()
 
 
 INTEL_GENERATIONS = {

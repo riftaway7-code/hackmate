@@ -460,25 +460,6 @@ def _amd_kernel_patches(profile: HardwareProfile) -> list[dict]:
           "B8 00000000 C3",
           min_k="20.0.0"),
 
-        # mach_trap_table patches — fix system call table for AMD
-        p("mach_trap_table 1",
-          "_mach_trap_table",
-          "B9 90010000",
-          "B9 00000000",
-          min_k="20.0.0"),
-
-        p("mach_trap_table 2",
-          "_mach_trap_table",
-          "4C 8D 15 XXXXXXXX",
-          "4C 8D 15 00000000",
-          min_k="20.0.0"),
-
-        # cpuid power management — AMD has no XCPM
-        p("xcpm_pkg_scope_msrs",
-          "_xcpm_pkg_scope_msrs",
-          "B9 790000C0 0F32",
-          "B9 790000C0 31C0",
-          min_k="20.0.0"),
     ]
 
 

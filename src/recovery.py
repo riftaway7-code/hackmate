@@ -59,7 +59,18 @@ def compatible_versions(cpu_gen: int, gpu_vendor: str, cpu_vendor: str = "intel"
 
 def ensure_macrecovery() -> Path:
     if not MACRECOVERY_PATH.exists():
-        urllib.request.urlretrieve(MACRECOVERY_URL, str(MACRECOVERY_PATH))
+        import ssl
+        ctx = ssl.create_default_context()
+        try:
+            req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackMate/1.0"})
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
+                MACRECOVERY_PATH.write_bytes(r.read())
+        except ssl.SSLError:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackMate/1.0"})
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
+                MACRECOVERY_PATH.write_bytes(r.read())
     return MACRECOVERY_PATH
 
 

@@ -6,9 +6,8 @@ import shlex
 import json
 from pathlib import Path
 
-if os.geteuid() != 0:
-    print("HackMate requires root. Run with: sudo python3 hackmate.py")
-    sys.exit(1)
+from platform import require_admin, IS_WINDOWS, get_usb_drives, format_usb, mount_usb, unmount_usb, get_mount_path, get_tmp_dir
+require_admin()
 
 from updater import check_and_update
 if check_and_update():
@@ -193,23 +192,30 @@ class RestoreConfirmScreen(Screen):
 
     @work(thread=True)
     def _do_restore(self) -> None:
-        import zipfile as zf, re
-        disk = re.sub(r'p?\d+$', '', self.device) if re.search(r'\d$', self.device) else self.device
-        part_device = (disk + "p1") if disk[-1].isdigit() else (disk + "1")
-        mount = Path("/tmp/hackmate_restore")
+        import zipfile as zf
+        mount = get_mount_path(self.device)
 
         def notify(msg, level="info"):
             self.app.call_from_thread(self.app.notify, msg)
 
         try:
-            mount.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["mount", part_device, str(mount)], check=True, capture_output=True)
-            efi_dest = mount / "EFI"
+            if not IS_WINDOWS:
+                mnt_path = Path("/tmp/hackmate_restore")
+                mnt_path.mkdir(parents=True, exist_ok=True)
+                if not mount_usb(self.device, str(mnt_path)):
+                    raise RuntimeError("Failed to mount USB for restore")
+                efi_dest = mnt_path / "EFI"
+            else:
+                efi_dest = Path(f"{mount}\\EFI")
+
             if efi_dest.exists():
                 shutil.rmtree(str(efi_dest))
             with zf.ZipFile(self.backup, "r") as z:
-                z.extractall(str(mount))
-            subprocess.run(["umount", str(mount)], capture_output=True)
+                z.extractall(str(efi_dest.parent) if not IS_WINDOWS else str(Path(f"{mount}\\")))
+
+            if not IS_WINDOWS:
+                unmount_usb(str(mnt_path))
+
             notify(f"Restore complete — EFI from {self.backup.stem} written to {self.device}")
         except Exception as e:
             notify(f"Restore failed: {e}")
@@ -320,27 +326,6 @@ class VersionScreen(Screen):
 
 # ─── USB Selection ────────────────────────────────────────────────────────────
 
-def get_usb_drives() -> list[tuple[str, str, str]]:
-    result = subprocess.run(
-        ["lsblk", "-o", "NAME,SIZE,FSTYPE,MOUNTPOINT,LABEL,TRAN", "-J", "-p"],
-        capture_output=True, text=True
-    )
-    data = json.loads(result.stdout)
-    drives = []
-    for dev in data.get("blockdevices", []):
-        if dev.get("tran") != "usb":
-            continue
-        children = dev.get("children", [])
-        if children:
-            for child in children:
-                size = dev.get("size", "?")
-                label = child.get("label") or child.get("fstype") or "No Label"
-                drives.append((child["name"], size, label))
-        else:
-            drives.append((dev["name"], dev.get("size", "?"), "No partition"))
-    return drives
-
-
 class USBScreen(Screen):
     def compose(self) -> ComposeResult:
         drives = get_usb_drives()
@@ -425,12 +410,28 @@ class ConfirmScreen(Screen):
         disk = re.sub(r'p?\d+$', '', self.device) if re.search(r'\d$', self.device) else self.device
 
         try:
-            model = subprocess.run(
-                ["lsblk", "-dno", "MODEL", disk], capture_output=True, text=True
-            ).stdout.strip() or "Unknown"
-            size = subprocess.run(
-                ["lsblk", "-dno", "SIZE", disk], capture_output=True, text=True
-            ).stdout.strip() or "?"
+            if IS_WINDOWS:
+                model = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     f"(Get-Partition -DriveLetter {self.device.rstrip(':')} | Get-Disk).FriendlyName"],
+                    capture_output=True, text=True, timeout=8
+                ).stdout.strip() or "Unknown"
+                size = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     f"(Get-Partition -DriveLetter {self.device.rstrip(':')} | Get-Disk).Size"],
+                    capture_output=True, text=True, timeout=8
+                ).stdout.strip()
+                if size and size.isdigit():
+                    size = f"{int(size) // 1024 // 1024 // 1024}GB"
+                else:
+                    size = "?"
+            else:
+                model = subprocess.run(
+                    ["lsblk", "-dno", "MODEL", disk], capture_output=True, text=True
+                ).stdout.strip() or "Unknown"
+                size = subprocess.run(
+                    ["lsblk", "-dno", "SIZE", disk], capture_output=True, text=True
+                ).stdout.strip() or "?"
         except Exception:
             model, size = "Unknown", "?"
 
@@ -514,8 +515,10 @@ class InstallScreen(Screen):
     def _cmd_log(self, cmd: list) -> None:
         try:
             cmd_str = " ".join(shlex.quote(str(c)) for c in cmd)
+            prompt = "hackmate@admin" if IS_WINDOWS else "hackmate@root"
+            sym = ">" if IS_WINDOWS else "$"
             self.query_one("#cmd-log", RichLog).write(
-                f"[dim]hackmate@root[/dim][#00ff88]$[/#00ff88] [white]{cmd_str}[/white]"
+                f"[dim]{prompt}[/dim][#00ff88]{sym}[/#00ff88] [white]{cmd_str}[/white]"
             )
         except Exception:
             pass
@@ -562,9 +565,9 @@ class InstallScreen(Screen):
         version: MacOSVersion       = self.app.macos_version
         device: str                 = self.device
         repair: bool                = self.repair
-        tmp = Path("/tmp/hackmate_build")
+        tmp = Path(get_tmp_dir())
         tmp.mkdir(parents=True, exist_ok=True)
-        mount = Path("/tmp/hackmate_usb")
+        mount = get_mount_path(device)
 
         def ui(pct, msg):
             self.app.call_from_thread(self._status, pct, msg)
@@ -584,25 +587,21 @@ class InstallScreen(Screen):
 
         self.app.call_from_thread(self._show_spinner, True)
 
-        import glob, re, time
-
-        # Determine partition device (sdb→sdb1, nvme0n1→nvme0n1p1)
-        disk = re.sub(r'p?\d+$', '', device) if re.search(r'\d$', device) else device
-        part_device = (disk + "p1") if disk[-1].isdigit() else (disk + "1")
+        import urllib.request
+        import zipfile
 
         try:
             if repair:
                 # ── Repair: mount and backup existing EFI before touching it ──
                 ui(2, "Mounting existing USB partition...")
                 log("── Repair mode: skipping format and recovery download", "header")
-                for part in sorted(glob.glob(f"{disk}*")):
-                    cmd(["umount", part], capture_output=True)
-                mount.mkdir(parents=True, exist_ok=True)
-                cmd(["mount", part_device, str(mount)], check=True, capture_output=True)
-                log(f"Mounted {part_device} at {mount}", "ok")
+                if not IS_WINDOWS:
+                    if not mount_usb(device, mount):
+                        raise RuntimeError(f"Failed to mount {device}")
+                log(f"Mounted at {mount}", "ok")
 
                 # Backup existing EFI before any changes
-                existing_efi = mount / "EFI"
+                existing_efi = Path(f"{mount}") / "EFI" if not IS_WINDOWS else Path(f"{mount}\\EFI")
                 if existing_efi.exists():
                     import datetime, zipfile as zf
                     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -619,33 +618,17 @@ class InstallScreen(Screen):
                     log(f"── EFI backed up: {file_count} files, {size_mb:.1f} MB → {backup_zip}", "ok")
             else:
                 # ── 1. Format USB ─────────────────────────────────────────────
-                ui(2, "Formatting USB as FAT32...")
+                ui(2, f"Formatting {device} as FAT32...")
+                log(f"── Formatting {device}...", "header")
+                self.app.call_from_thread(self._cmd_log, ["format_usb"] if IS_WINDOWS else ["parted", "mkfs.fat"])
+                fmt_ok = format_usb(device, mount)
+                if not fmt_ok:
+                    raise RuntimeError(f"Failed to format {device}")
+                log(f"Formatted {device} as FAT32 (GPT+ESP)", "ok")
 
-                # Unmount everything on the disk
-                for part in sorted(glob.glob(f"{disk}*")):
-                    cmd(["umount", part], capture_output=True)
-
-                # Need a real GPT + ESP — UEFI won't boot a raw FAT disk
-                cmd(["parted", "-s", disk, "mklabel", "gpt"], check=True, capture_output=True)
-                cmd(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"],
-                    check=True, capture_output=True)
-                cmd(["parted", "-s", disk, "set", "1", "esp", "on"], capture_output=True)
-                cmd(["partprobe", disk], capture_output=True)
-                time.sleep(1)
-
-                cmd(["mkfs.fat", "-F32", "-n", "HACKINTOSH", part_device],
-                    check=True, capture_output=True)
-                log(f"Formatted {part_device} as FAT32 (GPT+ESP)", "ok")
-
-                # ── 2. Mount USB ──────────────────────────────────────────────
-                ui(5, "Mounting USB...")
-                mount.mkdir(parents=True, exist_ok=True)
-                cmd(["mount", part_device, str(mount)], check=True, capture_output=True)
-                log(f"Mounted at {mount}", "ok")
-
-            # ── 3. Create / ensure EFI structure ─────────────────────────────
+            # ── 2. Create / ensure EFI structure ─────────────────────────────
             ui(8, "Creating EFI structure...")
-            efi       = mount / "EFI"
+            efi       = Path(f"{mount}") / "EFI" if not IS_WINDOWS else Path(f"{mount}\\EFI")
             oc_dir    = efi / "OC"
             boot_dir  = efi / "BOOT"
             kext_dir  = oc_dir / "Kexts"
@@ -656,12 +639,12 @@ class InstallScreen(Screen):
             log("EFI folder structure ready.", "ok")
 
             if not repair:
-                # ── 4. Download macOS recovery ────────────────────────────────
+                # ── 3. Download macOS recovery ────────────────────────────────
                 ui(10, f"Downloading {version.name} recovery from Apple...")
                 log(f"── Fetching {version.name} from Apple CDN...", "header")
                 recovery_dest = tmp / "recovery"
                 self.app.call_from_thread(self._cmd_log, [
-                    "python3", "macrecovery.py",
+                    "python3" if not IS_WINDOWS else "python", "macrecovery.py",
                     "-b", version.board_id, "-m", version.mlb,
                     *(version.os_flag.split() if version.os_flag else []),
                     "download", "--outdir", str(recovery_dest),
@@ -688,7 +671,7 @@ class InstallScreen(Screen):
                 files = list(recovery_dest.iterdir())
                 total_bytes = sum(f.stat().st_size for f in files if f.is_file())
                 log(f"  {len(files)} file(s), {total_bytes // 1024 // 1024} MB to write", "info")
-                com_apple = mount / "com.apple.recovery.boot"
+                com_apple = efi.parent / "com.apple.recovery.boot"
                 if com_apple.exists():
                     shutil.rmtree(str(com_apple))
                 com_apple.mkdir(parents=True)
@@ -701,7 +684,7 @@ class InstallScreen(Screen):
             else:
                 log("  Skipping recovery download (repair mode)", "info")
 
-            # ── 5. Generate SMBIOS ────────────────────────────────────────────
+            # ── 4. Generate SMBIOS ────────────────────────────────────────────
             ui(35, "Generating SMBIOS...")
             log("── Generating SMBIOS...", "header")
             from smbios import generate as gen_smbios
@@ -711,7 +694,7 @@ class InstallScreen(Screen):
             log(f"  MLB:     {smbios.board_serial}", "ok")
             log(f"  UUID:    {smbios.system_uuid}", "ok")
 
-            # ── 6. Generate config.plist ──────────────────────────────────────
+            # ── 5. Generate config.plist ──────────────────────────────────────
             ui(40, "Generating config.plist...")
             log("── Generating config.plist...", "header")
             from config_gen import generate as gen_config, write_plist, _required_ssdts
@@ -720,7 +703,7 @@ class InstallScreen(Screen):
             write_plist(config, config_path)
             log(f"  config.plist written ({config_path.stat().st_size} bytes)", "ok")
 
-            # ── 7. Download kexts ─────────────────────────────────────────────
+            # ── 6. Download kexts ─────────────────────────────────────────────
             ui(45, "Selecting kexts...")
             log("── Selecting kexts...", "header")
             from kexts import select_kexts, download_kexts
@@ -743,8 +726,7 @@ class InstallScreen(Screen):
                 if result.startswith("ERROR"):
                     log(f"  WARN: {name} — {result}", "warn")
 
-            # ── 8. Download OpenCore ──────────────────────────────────────────
-            import urllib.request
+            # ── 7. Download OpenCore ──────────────────────────────────────────
             MIN_EFI = 50 * 1024  # sane minimum — corrupt/truncated files are smaller
             oc_required = [
                 boot_dir / "BOOTx64.efi",
@@ -765,7 +747,7 @@ class InstallScreen(Screen):
                 oc_url = "https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
                 req = urllib.request.Request(oc_url, headers={"User-Agent": "HackMate/1.0"})
                 with urllib.request.urlopen(req, timeout=15) as r:
-                    oc_data = __import__("json").loads(r.read())
+                    oc_data = json.loads(r.read())
 
                 oc_asset = None
                 for asset in oc_data.get("assets", []):
@@ -779,7 +761,6 @@ class InstallScreen(Screen):
                     urllib.request.urlretrieve(oc_asset["browser_download_url"], str(oc_zip))
                     log(f"  Downloaded {oc_asset['name']}", "ok")
 
-                    import zipfile
                     oc_extract = tmp / "oc_extracted"
                     with zipfile.ZipFile(str(oc_zip)) as z:
                         z.extractall(str(oc_extract))
@@ -818,7 +799,7 @@ class InstallScreen(Screen):
                 else:
                     log("  Could not find OpenCore release asset", "error")
 
-            # ── 9. SSDTs via SSDTTime ─────────────────────────────────────────
+            # ── 8. SSDTs via SSDTTime ─────────────────────────────────────────
             if repair and acpi_dir.exists():
                 shutil.rmtree(str(acpi_dir))
                 acpi_dir.mkdir(parents=True)
@@ -870,7 +851,7 @@ class InstallScreen(Screen):
                 )
                 log(f"  {len(manual)} SSDTs need manual install — see README_MANUAL_SSDTS.txt", "warn")
 
-            # ── 10. EFI sanity check ─────────────────────────────────────────
+            # ── 9. EFI sanity check ─────────────────────────────────────────
             ui(97, "Running EFI sanity check...")
             log("", "info")
             log("── EFI Sanity Check ──────────────────────────────", "header")
@@ -889,9 +870,9 @@ class InstallScreen(Screen):
             else:
                 log(f"  All checks passed ({len(oks)} OK)", "ok")
 
-            # ── 11. Unmount ───────────────────────────────────────────────────
+            # ── 10. Unmount ───────────────────────────────────────────────────
             ui(99, "Unmounting USB...")
-            cmd(["umount", str(mount)], capture_output=True)
+            unmount_usb(mount)
             shutil.rmtree(str(tmp), ignore_errors=True)
 
             mode_label = "Repair complete" if repair else f"Done! {version.name} EFI ready"
@@ -911,9 +892,10 @@ class InstallScreen(Screen):
             import traceback
             log(traceback.format_exc(), "error")
             try:
-                cmd(["umount", str(mount)], capture_output=True)
+                unmount_usb(mount)
             except Exception:
                 pass
+            shutil.rmtree(str(tmp), ignore_errors=True)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "back":
@@ -922,7 +904,7 @@ class InstallScreen(Screen):
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
-VERSION = "v1.0 Linux"
+VERSION = "v1.0 Universal"
 
 class HackMate(App):
     CSS = CSS

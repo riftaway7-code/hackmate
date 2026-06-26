@@ -74,7 +74,15 @@ def ensure_macrecovery() -> Path:
     return MACRECOVERY_PATH
 
 
-_CACHE_DIR = Path.home() / ".hackmate" / "cache" / "recovery"
+def _real_home() -> Path:
+    import os
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        import pwd
+        return Path(pwd.getpwnam(sudo_user).pw_dir)
+    return Path.home()
+
+_CACHE_DIR = _real_home() / ".hackmate" / "cache" / "recovery"
 
 
 def _cached_recovery_files(version: MacOSVersion) -> list[Path]:

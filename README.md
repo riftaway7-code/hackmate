@@ -77,6 +77,12 @@ python setup.py
 - Run USBToolBox inside macOS to map USB ports
 - Replace the placeholder USBMap.kext with your generated one
 
+## Support
+
+HackMate is free and open source. If it saved you hours of config.plist hell, consider sponsoring:
+
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/riftaway7-code?style=flat&color=ea4aaa)](https://github.com/sponsors/riftaway7-code)
+
 ## Notes
 - macOS is sourced directly from Apple
 - Uses the same tools recommended by the Dortania guide (macrecovery, SSDTTime)

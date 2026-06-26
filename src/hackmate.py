@@ -101,10 +101,11 @@ class WelcomeScreen(Screen):
                 Static(BANNER,     classes="title",    id="banner"),
                 Static("Automated OpenCore EFI builder — any hardware", classes="info", id="subtitle"),
                 Static(""),
-                Button("Build EFI",    id="start",   classes="primary"),
-                Button("Restore EFI",  id="restore", classes="primary"),
-                Button("Edit Config",  id="edit_cfg",classes="primary"),
-                Button("Quit",         id="quit",    classes="danger"),
+                Button("Build EFI",              id="start",   classes="primary"),
+                Button("Build EFI (Manual)",     id="manual",  classes="primary"),
+                Button("Restore EFI",            id="restore", classes="primary"),
+                Button("Edit Config",            id="edit_cfg",classes="primary"),
+                Button("Quit",                   id="quit",    classes="danger"),
                 id="welcome-inner"
             ),
             id="welcome"
@@ -114,6 +115,8 @@ class WelcomeScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start":
             self.app.push_screen(ScanScreen())
+        elif event.button.id == "manual":
+            self.app.push_screen(ManualHardwareScreen())
         elif event.button.id == "restore":
             self.app.push_screen(RestoreScreen())
         elif event.button.id == "edit_cfg":
@@ -238,6 +241,255 @@ class RestoreConfirmScreen(Screen):
             notify(f"Restore complete — EFI from {self.backup.stem} written to {self.device}")
         except Exception as e:
             notify(f"Restore failed: {e}")
+
+
+# ─── Manual Hardware Screen ───────────────────────────────────────────────────
+
+class ManualHardwareScreen(Screen):
+    """Let user specify hardware manually — for building a USB for a different machine."""
+
+    CPU_OPTIONS = [
+        ("intel-2",  "Intel 2nd gen — Sandy Bridge (Core i-2xxx)"),
+        ("intel-3",  "Intel 3rd gen — Ivy Bridge (Core i-3xxx)"),
+        ("intel-4",  "Intel 4th gen — Haswell (Core i-4xxx)"),
+        ("intel-5",  "Intel 5th gen — Broadwell (Core i-5xxx)"),
+        ("intel-6",  "Intel 6th gen — Skylake (Core i-6xxx)"),
+        ("intel-7",  "Intel 7th gen — Kaby Lake (Core i-7xxx)"),
+        ("intel-8",  "Intel 8th gen — Coffee Lake / Whiskey Lake / Kaby Lake-R"),
+        ("intel-9",  "Intel 9th gen — Coffee Lake Refresh (Core i-9xxx)"),
+        ("intel-10", "Intel 10th gen — Comet Lake / Ice Lake"),
+        ("amd-zen",  "AMD Zen — Ryzen 1000 series"),
+        ("amd-zen+", "AMD Zen+ — Ryzen 2000 series"),
+        ("amd-zen2", "AMD Zen 2 — Ryzen 3000 series"),
+        ("amd-zen3", "AMD Zen 3 — Ryzen 5000 series"),
+        ("amd-zen4", "AMD Zen 4 — Ryzen 7000 series"),
+        ("amd-zen5", "AMD Zen 5 — Ryzen 9000 series"),
+    ]
+
+    GPU_OPTIONS = [
+        ("",         "Auto / same as CPU iGPU"),
+        ("5916",     "Intel HD 620 (Kaby Lake)"),
+        ("591b",     "Intel HD 630 (Kaby Lake)"),
+        ("5917",     "Intel UHD 620 (Kaby Lake-R)"),
+        ("3ea0",     "Intel UHD 620 (Whiskey Lake)"),
+        ("3e98",     "Intel UHD 630 (Coffee Lake)"),
+        ("9bca",     "Intel UHD 620 (Comet Lake)"),
+        ("9bc4",     "Intel UHD 630 (Comet Lake)"),
+        ("0166",     "Intel HD 4000 (Ivy Bridge)"),
+        ("0416",     "Intel HD 4600 (Haswell)"),
+        ("1916",     "Intel HD 520 (Skylake)"),
+        ("amd",      "AMD Radeon (iGPU / dGPU)"),
+        ("nvidia",   "Nvidia (must disable in BIOS for macOS)"),
+    ]
+
+    ETHERNET_OPTIONS = [
+        ("",        "None / Unknown"),
+        ("rtl8111", "Realtek RTL8111 / RTL8168"),
+        ("rtl8125", "Realtek RTL8125 (2.5G)"),
+        ("i219",    "Intel I219-V / I219-LM"),
+        ("i225",    "Intel I225-V (2.5G)"),
+        ("i226",    "Intel I226-V (2.5G)"),
+        ("i211",    "Intel I211-AT"),
+    ]
+
+    WIFI_OPTIONS = [
+        ("",         "None"),
+        ("intel",    "Intel (AX200 / AX210 / AC-9260 / AC-8265)"),
+        ("broadcom", "Broadcom (BCM94360 / BCM943602)"),
+        ("atheros",  "Atheros / Qualcomm"),
+        ("realtek",  "Realtek (limited support)"),
+    ]
+
+    _CPU_META = {
+        "intel-2":  (2,  "Sandy Bridge",       "intel", "Sandy Bridge"),
+        "intel-3":  (3,  "Ivy Bridge",         "intel", "Ivy Bridge"),
+        "intel-4":  (4,  "Haswell",            "intel", "Haswell"),
+        "intel-5":  (5,  "Broadwell",          "intel", "Broadwell"),
+        "intel-6":  (6,  "Skylake",            "intel", "Skylake"),
+        "intel-7":  (7,  "Kaby Lake",          "intel", "Kaby Lake"),
+        "intel-8":  (8,  "Coffee Lake",        "intel", "Coffee Lake"),
+        "intel-9":  (9,  "Coffee Lake Refresh","intel", "Coffee Lake Refresh"),
+        "intel-10": (10, "Comet Lake",         "intel", "Comet Lake"),
+        "amd-zen":  (8,  "Zen",               "amd",   "Ryzen"),
+        "amd-zen+": (8,  "Zen+",              "amd",   "Ryzen"),
+        "amd-zen2": (10, "Zen 2",             "amd",   "Ryzen"),
+        "amd-zen3": (11, "Zen 3",             "amd",   "Ryzen"),
+        "amd-zen4": (12, "Zen 4",             "amd",   "Ryzen"),
+        "amd-zen5": (12, "Zen 5",             "amd",   "Ryzen"),
+    }
+
+    def __init__(self):
+        super().__init__()
+        self._cpu_idx = 6   # default: Intel 7th gen
+        self._gpu_idx = 0
+        self._eth_idx = 0
+        self._wifi_idx = 0
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Manual Hardware Setup ──────────────────────────────────", classes="title"),
+                Static("  Building a USB for a different machine? Set its hardware here.", classes="info"),
+                Static(""),
+                ScrollableContainer(
+                    Vertical(
+                        Static("  ── CPU ───────────────────────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
+                            classes="cfg-row",
+                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS)],
+
+                        Static("  ── Platform ──────────────────────────────────", classes="cfg-section"),
+                        Horizontal(
+                            Static("  Type:", classes="cfg-label"),
+                            Switch(value=True, id="sw-laptop"),
+                            Static("  laptop", id="platform-label", classes="info"),
+                            classes="cfg-row",
+                        ),
+
+                        Static("  ── CPU Cores ─────────────────────────────────", classes="cfg-section"),
+                        Horizontal(Static("  Core count:", classes="cfg-label"), Input(value="4", placeholder="4", id="in-cores", classes="short-input"), classes="cfg-row"),
+
+                        Static("  ── GPU ───────────────────────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._gpu_idx else "  ") + label, id=f"gpu-{key if key else 'auto'}", classes="advanced-btn"),
+                            classes="cfg-row",
+                        ) for i, (key, label) in enumerate(self.GPU_OPTIONS)],
+
+                        Static("  ── Audio Codec ───────────────────────────────", classes="cfg-section"),
+                        Static("  e.g. ALC256, ALC269, ALC1220", classes="info"),
+                        Horizontal(Static("  Codec:", classes="cfg-label"), Input(value="", placeholder="ALC256", id="in-audio", classes="short-input"), classes="cfg-row"),
+
+                        Static("  ── Ethernet ──────────────────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._eth_idx else "  ") + label, id=f"eth-{key if key else 'none'}", classes="advanced-btn"),
+                            classes="cfg-row",
+                        ) for i, (key, label) in enumerate(self.ETHERNET_OPTIONS)],
+
+                        Static("  ── WiFi ──────────────────────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._wifi_idx else "  ") + label, id=f"wifi-{key if key else 'none'}", classes="advanced-btn"),
+                            classes="cfg-row",
+                        ) for i, (key, label) in enumerate(self.WIFI_OPTIONS)],
+
+                        Static("  ── Other ─────────────────────────────────────", classes="cfg-section"),
+                        Horizontal(Static("  NVMe drive:", classes="cfg-label"), Switch(value=True, id="sw-nvme"), classes="cfg-row"),
+                        Horizontal(Static("  Thunderbolt:", classes="cfg-label"), Switch(value=False, id="sw-tb"), classes="cfg-row"),
+
+                        id="manual-inner"
+                    ),
+                    id="manual-scroll"
+                ),
+                Static(""),
+                Horizontal(
+                    Button("Continue →", id="next", classes="primary"),
+                    Button("← Back",     id="back", classes="back"),
+                ),
+                Static("", id="manual-status"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def _select(self, group: str, key: str, options: list) -> None:
+        for k, _ in options:
+            btn_id = f"{group}-{k if k else ('auto' if group == 'gpu' else 'none')}"
+            try:
+                btn = self.query_one(f"#{btn_id}", Button)
+                label = btn.label.plain.lstrip("▶ ").strip()
+                btn.label = ("▶ " if k == key else "  ") + label
+            except Exception:
+                pass
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id
+
+        if bid.startswith("cpu-"):
+            key = bid[4:]
+            self._cpu_idx = next((i for i, (k, _) in enumerate(self.CPU_OPTIONS) if k == key), 0)
+            self._select("cpu", key, self.CPU_OPTIONS)
+
+        elif bid.startswith("gpu-"):
+            key = bid[4:]
+            if key == "auto": key = ""
+            self._gpu_idx = next((i for i, (k, _) in enumerate(self.GPU_OPTIONS) if k == key), 0)
+            self._select("gpu", key, self.GPU_OPTIONS)
+
+        elif bid.startswith("eth-"):
+            key = bid[4:]
+            if key == "none": key = ""
+            self._eth_idx = next((i for i, (k, _) in enumerate(self.ETHERNET_OPTIONS) if k == key), 0)
+            self._select("eth", key, self.ETHERNET_OPTIONS)
+
+        elif bid.startswith("wifi-"):
+            key = bid[5:]
+            if key == "none": key = ""
+            self._wifi_idx = next((i for i, (k, _) in enumerate(self.WIFI_OPTIONS) if k == key), 0)
+            self._select("wifi", key, self.WIFI_OPTIONS)
+
+        elif bid == "next":
+            self._build_profile()
+
+        elif bid == "back":
+            self.app.pop_screen()
+
+    def on_switch_changed(self, event) -> None:
+        if event.switch.id == "sw-laptop":
+            self.query_one("#platform-label", Static).update(
+                "  laptop" if event.value else "  desktop"
+            )
+
+    def _build_profile(self) -> None:
+        from hardware import HardwareProfile
+        from smbios import SMBIOS_MAP
+
+        cpu_key = self.CPU_OPTIONS[self._cpu_idx][0]
+        gen, codename, vendor, oc_platform = self._CPU_META[cpu_key]
+
+        gpu_key = self.GPU_OPTIONS[self._gpu_idx][0]
+        gpu_vendor = "intel"
+        if gpu_key == "amd":    gpu_vendor = "amd"
+        elif gpu_key == "nvidia": gpu_vendor = "nvidia"
+
+        eth_key  = self.ETHERNET_OPTIONS[self._eth_idx][0]
+        wifi_key = self.WIFI_OPTIONS[self._wifi_idx][0]
+        is_laptop = self.query_one("#sw-laptop", Switch).value
+        platform  = "laptop" if is_laptop else "desktop"
+        audio     = self.query_one("#in-audio", Input).value.strip().upper() or ""
+
+        try:
+            cores = int(self.query_one("#in-cores", Input).value.strip())
+        except ValueError:
+            cores = 4
+
+        profile = HardwareProfile(
+            cpu_name        = f"{vendor.title()} {codename}",
+            cpu_vendor      = vendor,
+            cpu_generation  = gen,
+            cpu_codename    = codename,
+            oc_platform     = oc_platform,
+            core_count      = cores,
+            gpu_vendor      = gpu_vendor,
+            gpu_name        = self.GPU_OPTIONS[self._gpu_idx][1],
+            gpu_device_id   = gpu_key if gpu_key not in ("amd", "nvidia", "") else "",
+            audio_codec     = audio,
+            ethernet_chipset= eth_key,
+            wifi_chipset    = wifi_key,
+            platform        = platform,
+            nvme_present    = self.query_one("#sw-nvme", Switch).value,
+            has_thunderbolt = self.query_one("#sw-tb",   Switch).value,
+            has_touchpad    = is_laptop,
+        )
+
+        # derive SMBIOS
+        try:
+            profile.smbios_model = SMBIOS_MAP.get((gen, platform), "")
+        except Exception:
+            pass
+
+        self.app.profile = profile
+        self.app.push_screen(VersionScreen())
 
 
 # ─── Scanning ─────────────────────────────────────────────────────────────────

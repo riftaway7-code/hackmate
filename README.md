@@ -1,4 +1,10 @@
 # HackMate
+
+[![Stars](https://img.shields.io/github/stars/riftaway7-code/hackmate?style=flat&color=gold)](https://github.com/riftaway7-code/hackmate/stargazers)
+[![Issues](https://img.shields.io/github/issues/riftaway7-code/hackmate?style=flat&color=red)](https://github.com/riftaway7-code/hackmate/issues)
+[![License](https://img.shields.io/github/license/riftaway7-code/hackmate?style=flat&color=blue)](LICENSE)
+[![Version](https://img.shields.io/github/v/release/riftaway7-code/hackmate?style=flat&color=green)](https://github.com/riftaway7-code/hackmate/releases)
+
 Automates the entire process of creating a bootable OpenCore hackintosh USB. No manual config.plist editing, no hunting down kexts, no macrecovery commands.
 
 Supports Linux, Windows, and macOS as host operating systems.
@@ -40,15 +46,17 @@ sudo .venv/bin/python3 src/hackmate.py
 > Always use the full path to the venv Python (`.venv/bin/python3`) with `sudo` — not `python3` or `uv run`. sudo does not inherit your PATH so it won't find uv or your user-installed packages.
 
 ### Windows
+
+> **Must be run as Administrator.** Right-click PowerShell and select "Run as administrator" before running any of these commands.
+
 ```powershell
 git clone https://github.com/riftaway7-code/hackmate.git
 cd hackmate
 python setup.py
-# Run as Administrator:
 .venv\Scripts\python.exe src\hackmate.py
 ```
 
-> `setup.py` creates a virtual environment and installs required dependencies. HackMate will also tell you if anything is missing when you launch it.
+> Always use `.venv\Scripts\python.exe` to run HackMate — not `python` or `uv run`. The venv ensures all dependencies are available.
 
 ---
 

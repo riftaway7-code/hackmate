@@ -26,6 +26,7 @@ FILES = [
     "updater.py",
     "efi_check.py",
     "compat.py",
+    # Legacy flat names kept for users who have not yet migrated to package layout
 ]
 
 

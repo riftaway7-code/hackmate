@@ -979,7 +979,14 @@ class InstallScreen(Screen):
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
-VERSION = "v1.0 Universal"
+def _get_version() -> str:
+    try:
+        sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
+        return f"v1.1.0 ({sha})"
+    except Exception:
+        return "v1.1.0"
+
+VERSION = _get_version()
 
 class HackMate(App):
     CSS = CSS

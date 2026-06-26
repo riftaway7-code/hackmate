@@ -163,6 +163,7 @@ NO_EXECUTABLE = {
     "FakeSMC_ACPISensors", "FakeSMC_CPUSensors", "FakeSMC_GPUSensors",
     "FakeSMC_LPCSensors", "FakeSMC_SMMSensors",
     "NullEthernet",
+    "VoodooGPIO",
 }
 
 # Min/Max kernel versions for version-specific kexts
@@ -194,7 +195,7 @@ def _kext_entry(kext: KextEntry) -> dict:
         "BundlePath":     f"{kext.name}.kext",
         "Comment":        kext.note,
         "Enabled":        True,
-        "ExecutablePath": f"Contents/MacOS/{kext.name}" if has_exe else "",
+        "ExecutablePath": f"Contents/MacOS/{kext.exe_name or kext.name}" if has_exe else "",
         "MaxKernel":      max_k,
         "MinKernel":      min_k,
         "PlistPath":      "Contents/Info.plist",
@@ -349,7 +350,7 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
         "LegacyCommpage":             False,
         "PanicNoKextDump":            True,
         "PowerTimeoutKernelPanic":    True,
-        "ProvideCurrentCpuInfo":      True if profile.cpu_generation >= 10 else False,
+        "ProvideCurrentCpuInfo":      True,
         "SetApfsTrimTimeout":         -1,
         "XhciPortLimit":              False,   # use USB map
     }
@@ -435,9 +436,10 @@ def _amd_kernel_patches(profile: HardwareProfile) -> list[dict]:
 
 def _nvram_section(profile: HardwareProfile, layout_id: int) -> dict:
     boot_args = [
-        "-v",              # verbose on first boot (remove after working)
-        "debug=0x100",     # don't panic on kernel error
-        "keepsyms=1",      # keep symbols for debug
+        "-v",                  # verbose on first boot (remove after working)
+        "debug=0x100",         # don't panic on kernel error
+        "keepsyms=1",          # keep symbols for debug
+        "-no_compat_check",    # bypass board ID check in boot.efi
         f"alcid={layout_id}",
     ]
 
@@ -615,10 +617,10 @@ def _booter_section(profile: HardwareProfile) -> dict:
             "ProtectUefiServices":      False if profile.cpu_generation < 10 else True,
             "ProvideCustomSlide":       True,
             "ProvideMaxSlide":          0,
-            "RebuildAppleMemoryMap":    False,
+            "RebuildAppleMemoryMap":    True,
             "ResizeAppleGpuBars":       -1,
             "SetupVirtualMap":          True,
-            "SignalAppleOS":            False,
+            "SignalAppleOS":            True,
             "SyncRuntimePermissions":   True,
         },
     }

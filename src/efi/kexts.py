@@ -17,6 +17,7 @@ class KextEntry:
     asset_pattern: str
     note: str = ""
     bundle_name: str = ""  # actual .kext bundle name if different from name
+    exe_name: str = ""    # binary name inside Contents/MacOS/ if different from name
 
 
 # ─── Master kext database ─────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ DB: dict[str, KextEntry] = {
     "VoodooPS2Trackpad": KextEntry("VoodooPS2Trackpad","acidanthera/VoodooPS2",       "VoodooPS2Controller-","PS/2 trackpad (in VoodooPS2 zip)"),
 
     # ── I2C input ─────────────────────────────────────────────────────────────
-    "VoodooI2C":         KextEntry("VoodooI2C",        "VoodooI2C/VoodooI2C",         "VoodooI2C-",         "I2C trackpad/touchscreen base"),
+    "VoodooI2C":         KextEntry("VoodooI2C",        "VoodooI2C/VoodooI2C",         "VoodooI2C-",         "I2C trackpad/touchscreen base", exe_name="VoodooI2C"),
     "VoodooI2CHID":      KextEntry("VoodooI2CHID",     "VoodooI2C/VoodooI2C",         "VoodooI2C-",         "generic I2C-HID satellite (bundled in VoodooI2C zip)"),
     "VoodooI2CSynaptics":KextEntry("VoodooI2CSynaptics","VoodooI2C/VoodooI2C",        "VoodooI2C-",         "Synaptics I2C satellite (bundled in VoodooI2C zip)"),
     "VoodooI2CELAN":     KextEntry("VoodooI2CELAN",    "VoodooI2C/VoodooI2C",         "VoodooI2C-",         "ELAN I2C satellite (bundled in VoodooI2C zip)"),
@@ -78,7 +79,7 @@ DB: dict[str, KextEntry] = {
     "VoodooRMI":         KextEntry("VoodooRMI",        "1Revenger1/VoodooRMI",        "VoodooRMI-",         "Synaptics RMI4 trackpad (better than PS2 on some laptops)"),
 
     # ── Ethernet ──────────────────────────────────────────────────────────────
-    "IntelMausiEthernet":KextEntry("IntelMausiEthernet","acidanthera/IntelMausi",        "IntelMausi-",        "Intel I219/I218/I217 Ethernet", bundle_name="IntelMausi"),
+    "IntelMausiEthernet":KextEntry("IntelMausiEthernet","acidanthera/IntelMausi",        "IntelMausi-",        "Intel I219/I218/I217 Ethernet", bundle_name="IntelMausi", exe_name="IntelMausi"),
     "AppleIGC":          KextEntry("AppleIGC",         "SongXiaoXi/AppleIGC",         "AppleIGC-",          "Intel I225-V / I226-V 2.5GbE"),
     "AppleIntelE1000e":  KextEntry("AppleIntelE1000e", "chris1111/AppleIntelE1000e",  "AppleIntelE1000e-",  "Intel 82578/82577/82574/82567 Ethernet"),
     "AppleIntelI210Ethernet":KextEntry("AppleIntelI210Ethernet","donatengit/AppleIntelI210Ethernet","AppleIntelI210-","Intel I211/I210 Ethernet"),
@@ -93,7 +94,7 @@ DB: dict[str, KextEntry] = {
     "NullEthernet":      KextEntry("NullEthernet",     "RehabMan/OS-X-Null-Ethernet", "NullEthernet-",      "placeholder ethernet for iMessage/iCloud on WiFi-only"),
 
     # ── WiFi ──────────────────────────────────────────────────────────────────
-    "itlwm":             KextEntry("itlwm",            "OpenIntelWireless/itlwm",     "itlwm_",             "Intel WiFi (needs HeliPort app for menu bar)"),
+    "itlwm":             KextEntry("itlwm",            "OpenIntelWireless/itlwm",     "itlwm_",             "Intel WiFi (needs HeliPort app for menu bar)", exe_name="AirportItlwm"),
     "AirportItlwm":      KextEntry("AirportItlwm",     "OpenIntelWireless/itlwm",     "AirportItlwm_",      "Intel WiFi as native AirportBSD (macOS version specific!)"),
     "AirportBrcmFixup":  KextEntry("AirportBrcmFixup", "acidanthera/AirportBrcmFixup","AirportBrcmFixup-",  "Broadcom BCM94352Z/BCM943602CS WiFi patches"),
     "ATH9KFixup":        KextEntry("ATH9KFixup",       "chontos/ATH9KFixup",          "ATH9KFixup-",        "Atheros AR9xxx WiFi patches"),

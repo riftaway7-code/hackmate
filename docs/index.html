@@ -276,6 +276,12 @@
   <div class="faq-q">Is it safe to run?</div>
   <div class="faq-a">It only touches your target USB drive. Internal disks are hidden from the device list. Source is fully open on GitHub.</div>
 
+  <div class="faq-q">Will it work in VirtualBox or VMware?</div>
+  <div class="faq-a">HackMate can run inside a VM to build the USB, but the USB itself needs to boot on real hardware. macOS on VirtualBox/VMware is a different process (no OpenCore needed) and not what this tool is for.</div>
+
+  <div class="faq-q">Will it work on a Chromebook?</div>
+  <div class="faq-a">No — Chromebooks use coreboot/depthcharge firmware instead of UEFI, so OpenCore can't boot on them without flashing custom firmware first, which is a separate process and risks bricking the device.</div>
+
   <div class="faq-q">Do I still need to follow the Dortania guide?</div>
   <div class="faq-a">HackMate automates the Dortania guide steps using the same tools (macrecovery, SSDTTime, OpenCore). Reading the guide is still useful for understanding what's happening, but you don't need to run any of it manually.</div>
 

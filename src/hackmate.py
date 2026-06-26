@@ -385,11 +385,31 @@ class ManualHardwareScreen(Screen):
                 Static(""),
                 ScrollableContainer(
                     Vertical(
-                        Static("  ── CPU ───────────────────────────────────────", classes="cfg-section"),
+                        Static("  ── CPU — Intel Desktop ───────────────────────", classes="cfg-section"),
                         *[Horizontal(
                             Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
                             classes="manual-row",
-                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS)],
+                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS) if key.startswith("intel-") and not key.endswith("m") and not any(key.endswith(s) for s in ("kr","wl","cl","cm","il","tl"))],
+                        Static("  ── CPU — Intel Laptop ────────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
+                            classes="manual-row",
+                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS) if key.startswith("intel-") and (key.endswith("m") or any(key.endswith(s) for s in ("kr","wl","cl","cm","il","tl")))],
+                        Static("  ── CPU — AMD Desktop ─────────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
+                            classes="manual-row",
+                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS) if key.startswith("amd-") and key.endswith("d")],
+                        Static("  ── CPU — AMD Threadripper ────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
+                            classes="manual-row",
+                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS) if key.startswith("amd-tr")],
+                        Static("  ── CPU — AMD Laptop / APU ────────────────────", classes="cfg-section"),
+                        *[Horizontal(
+                            Button(("▶ " if i == self._cpu_idx else "  ") + label, id=f"cpu-{key}", classes="advanced-btn"),
+                            classes="manual-row",
+                        ) for i, (key, label) in enumerate(self.CPU_OPTIONS) if key.startswith("amd-") and key.endswith("m")],
 
                         Static("  ── Platform ──────────────────────────────────", classes="cfg-section"),
                         Horizontal(
@@ -492,8 +512,7 @@ class ManualHardwareScreen(Screen):
             )
 
     def _build_profile(self) -> None:
-        from hardware import HardwareProfile
-        from smbios import SMBIOS_MAP
+        from hardware import HardwareProfile, SMBIOS_MAP
 
         cpu_key = self.CPU_OPTIONS[self._cpu_idx][0]
         gen, codename, vendor, oc_platform = self._CPU_META[cpu_key]

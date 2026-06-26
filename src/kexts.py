@@ -374,7 +374,7 @@ def select_kexts(profile: HardwareProfile) -> list[KextEntry]:
                 "i2c_goodix":   "VoodooI2CGoodix",
             }.get(tp, "VoodooI2CHID")
             add(sat)
-            add("VoodooGPIO")
+            # VoodooGPIO is bundled inside VoodooI2C — don't add standalone
         else:
             add("VoodooPS2Controller")
 

@@ -435,9 +435,10 @@ def _amd_kernel_patches(profile: HardwareProfile) -> list[dict]:
 
 def _nvram_section(profile: HardwareProfile, layout_id: int) -> dict:
     boot_args = [
-        "-v",              # verbose on first boot (remove after working)
-        "debug=0x100",     # don't panic on kernel error
-        "keepsyms=1",      # keep symbols for debug
+        "-v",                  # verbose on first boot (remove after working)
+        "debug=0x100",         # don't panic on kernel error
+        "keepsyms=1",          # keep symbols for debug
+        "-no_compat_check",    # bypass board ID check in boot.efi
         f"alcid={layout_id}",
     ]
 

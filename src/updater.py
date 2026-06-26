@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO       = "riftaway7-code/hackmate"
 BRANCH     = "main"
-RAW_BASE   = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/hackmate-linux"
+RAW_BASE   = f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/src"
 API_URL    = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
 VERSION_FILE = Path(__file__).parent / ".version"
 
@@ -23,9 +23,9 @@ FILES = [
     "smbios.py",
     "recovery.py",
     "ssdt.py",
-    "ai_fallback.py",
     "updater.py",
     "efi_check.py",
+    "platform.py",
 ]
 
 
@@ -46,8 +46,7 @@ def _get_local_sha() -> str | None:
 
 
 def _download_file(filename: str, sha: str) -> bool:
-    # Pin to exact commit SHA so GitHub CDN can't serve a cached older version
-    url = f"https://raw.githubusercontent.com/{REPO}/{sha}/hackmate-linux/{filename}"
+    url = f"https://raw.githubusercontent.com/{REPO}/{sha}/src/{filename}"
     dest = Path(__file__).parent / filename
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "HackMate/1.0"})
@@ -59,10 +58,6 @@ def _download_file(filename: str, sha: str) -> bool:
 
 
 def check_and_update(silent: bool = False) -> bool:
-    """
-    Check for updates and apply them if available.
-    Returns True if an update was applied (caller should re-exec).
-    """
     if not silent:
         print("Checking for updates...", end=" ", flush=True)
 

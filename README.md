@@ -1,12 +1,9 @@
 # HackMate
 Automates the entire process of creating a bootable OpenCore hackintosh USB. No manual config.plist editing, no hunting down kexts, no macrecovery commands.
 
-## Platforms
+## Platform
 
-| Platform | Folder |
-|----------|--------|
-| Linux (any distro) | `hackmate-linux/` |
-| Windows 10/11 | `hackmate-windows/` |
+`src/` works on both Linux and Windows from a single codebase.
 
 ---
 
@@ -16,7 +13,7 @@ Automates the entire process of creating a bootable OpenCore hackintosh USB. No 
 
 ```bash
 git clone https://github.com/riftaway7-code/hackmate.git
-cd hackmate/hackmate-linux
+cd hackmate/src
 pip install textual
 sudo python3 hackmate.py
 ```
@@ -27,7 +24,7 @@ sudo python3 hackmate.py
 
 ```powershell
 git clone https://github.com/riftaway7-code/hackmate.git
-cd hackmate\hackmate-windows
+cd hackmate\src
 pip install textual
 # Right-click → Run as Administrator, or from an admin terminal:
 python hackmate.py

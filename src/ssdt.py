@@ -18,6 +18,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Optional
+from platform import IS_WINDOWS, get_dsdt, find_iasl, chmod_iasl
 
 SSDTTIME_ZIP_URL = "https://github.com/corpnewt/SSDTTime/archive/refs/heads/master.zip"
 SSDTTIME_DIR = Path(__file__).parent / "_ssdttime"
@@ -76,8 +77,8 @@ def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path, ssdt_n
         dsl_file = acpi_dir / f"{ssdt_name}.dsl"
         dsl_file.write_text(dsl)
 
-        iasl = ssdttime_dir / "Scripts" / "iasl"
-        if not iasl.exists():
+        iasl = find_iasl(ssdttime_dir)
+        if not iasl:
             return False
 
         subprocess.run([str(iasl), str(dsl_file)], capture_output=True, timeout=15)
@@ -116,21 +117,15 @@ def _ensure_ssdttime() -> Path:
         shutil.move(str(item), str(dest))
     extracted.rmdir()
 
-    # Make bundled iasl executable
-    for iasl in (SSDTTIME_DIR / "Scripts").rglob("iasl*"):
-        iasl.chmod(iasl.stat().st_mode | 0o111)
+    # Make bundled iasl executable (no-op on Windows)
+    chmod_iasl(SSDTTIME_DIR)
 
     return script
 
 
 def _get_dsdt(tmp: Path) -> Optional[Path]:
-    """Copy DSDT binary from the running kernel's ACPI tables."""
-    src = Path("/sys/firmware/acpi/tables/DSDT")
-    if not src.exists():
-        return None
-    dst = tmp / "DSDT.aml"
-    shutil.copy2(str(src), str(dst))
-    return dst
+    """Dump DSDT binary from the running system's ACPI tables."""
+    return get_dsdt(tmp)
 
 
 def _parse_menu(output: str) -> dict[str, str]:
@@ -204,7 +199,7 @@ def generate(
         return results
 
     # ── 2. Copy DSDT ─────────────────────────────────────────────────────────
-    cb("Copying DSDT from /sys/firmware/acpi/tables/DSDT...")
+    cb("Extracting DSDT from system ACPI tables...")
     dsdt = _get_dsdt(tmp)
     if not dsdt:
         for n in doable:

@@ -7,6 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 from hardware import HardwareProfile
+from platform import IS_WINDOWS
 
 
 @dataclass
@@ -129,7 +130,7 @@ DB: dict[str, KextEntry] = {
     "ACPIBatteryManager":KextEntry("ACPIBatteryManager","RehabMan/OS-X-ACPI-Battery-Driver","ACPIBatteryManager-","battery (legacy, use ECEnabler instead on modern OC)"),
 
     # ── USB ───────────────────────────────────────────────────────────────────
-    "USBToolBox":        KextEntry("USBToolBox",       "USBToolBox/USBToolBox",       "USBToolBox-",        "USB port mapping tool"),
+    "USBToolBox":        KextEntry("USBToolBox",       "USBToolBox/USBToolBox",       "USBToolBox.kext",    "USB port mapping tool"),
     "UTBMap":            KextEntry("UTBMap",           "USBToolBox/UTBMap",           "UTBMap-",            "USB port map (user-generated, companion to USBToolBox)"),
     "USBInjectAll":      KextEntry("USBInjectAll",     "Sniki/OS-X-USB-Inject-All",   "USBInjectAll-",      "inject all USB ports (use only during mapping, not final EFI)"),
     "GenericUSBXHCI":    KextEntry("GenericUSBXHCI",   "RattletraPM/GenericUSBXHCI",  "GenericUSBXHCI-",    "AMD USB 3.x controller support"),
@@ -203,52 +204,63 @@ def get_alc_layout(codec: str) -> int:
 # ─── Detection helpers ────────────────────────────────────────────────────────
 
 def _dmi(field: str) -> str:
-    wmi_map = {
-        "sys_vendor":    "(Get-WmiObject Win32_ComputerSystem).Manufacturer",
-        "product_name":  "(Get-WmiObject Win32_ComputerSystem).Model",
-        "board_vendor":  "(Get-WmiObject Win32_BaseBoard).Manufacturer",
-        "board_name":    "(Get-WmiObject Win32_BaseBoard).Product",
-    }
-    cmd = wmi_map.get(field)
-    if not cmd:
-        return ""
+    if IS_WINDOWS:
+        wmi_map = {
+            "sys_vendor":    "(Get-WmiObject Win32_ComputerSystem).Manufacturer",
+            "product_name":  "(Get-WmiObject Win32_ComputerSystem).Model",
+            "board_vendor":  "(Get-WmiObject Win32_BaseBoard).Manufacturer",
+            "board_name":    "(Get-WmiObject Win32_BaseBoard).Product",
+        }
+        cmd = wmi_map.get(field)
+        if not cmd:
+            return ""
+        try:
+            return subprocess.run(
+                ["powershell", "-NoProfile", "-Command", cmd],
+                capture_output=True, text=True, timeout=8
+            ).stdout.strip().lower()
+        except Exception:
+            return ""
     try:
-        return subprocess.run(
-            ["powershell", "-NoProfile", "-Command", cmd],
-            capture_output=True, text=True, timeout=8
-        ).stdout.strip().lower()
+        return Path(f"/sys/class/dmi/id/{field}").read_text().strip().lower()
     except Exception:
         return ""
 
 
 def _detect_touchpad_type() -> str:
-    try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty Name"],
-            capture_output=True, text=True, timeout=10
-        ).stdout.lower()
-    except Exception:
-        out = ""
+    if IS_WINDOWS:
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty Name"],
+                capture_output=True, text=True, timeout=10
+            ).stdout.lower()
+        except Exception:
+            out = ""
+        try:
+            pnp = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty PNPDeviceID"],
+                capture_output=True, text=True, timeout=10
+            ).stdout.lower()
+        except Exception:
+            pnp = ""
+        combined = out + pnp
+    else:
+        dmesg = subprocess.run(["dmesg"], capture_output=True, text=True).stdout.lower()
+        i2c = subprocess.run(["find", "/sys/bus/i2c/devices", "-name", "name"],
+                             capture_output=True, text=True).stdout.lower()
+        smbus = subprocess.run(["find", "/sys/bus/platform/devices", "-name", "name"],
+                               capture_output=True, text=True).stdout.lower()
+        combined = dmesg + i2c + smbus
 
-    try:
-        pnp = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty PNPDeviceID"],
-            capture_output=True, text=True, timeout=10
-        ).stdout.lower()
-    except Exception:
-        pnp = ""
-
-    combined = out + pnp
-
-    if "rmi4" in combined or "rmi" in combined:      return "rmi"
+    if "rmi4" in combined or "rmi " in combined:     return "rmi"
     if "elan" in combined and "i2c" in combined:     return "i2c_elan"
     if "synaptics" in combined and "i2c" in combined:return "i2c_synaptics"
     if "atmel" in combined and "i2c" in combined:    return "i2c_atmel"
     if "goodix" in combined:                         return "i2c_goodix"
     if "fte" in combined and "i2c" in combined:      return "i2c_fte"
-    if "i2c" in combined:                            return "i2c_hid"
+    if "i2c-hid" in combined or ("i2c" in combined and IS_WINDOWS): return "i2c_hid"
     return "ps2"
 
 
@@ -278,15 +290,18 @@ def _is_hedt(profile: HardwareProfile) -> bool:
 
 
 def _has_card_reader() -> bool:
-    try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'card reader|rts5|rtsx' } | Measure-Object | Select-Object -ExpandProperty Count"],
-            capture_output=True, text=True, timeout=8
-        ).stdout.strip()
-        return int(out) > 0
-    except Exception:
-        return False
+    if IS_WINDOWS:
+        try:
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'card reader|rts5|rtsx' } | Measure-Object | Select-Object -ExpandProperty Count"],
+                capture_output=True, text=True, timeout=8
+            ).stdout.strip()
+            return int(out) > 0
+        except Exception:
+            return False
+    lspci = subprocess.run(["lspci", "-nn"], capture_output=True, text=True).stdout.lower()
+    return "rts5" in lspci or "card reader" in lspci or "rtsx" in lspci
 
 
 # ─── Selection logic ──────────────────────────────────────────────────────────
@@ -423,7 +438,6 @@ def select_kexts(profile: HardwareProfile) -> list[KextEntry]:
 
     # ── USB ───────────────────────────────────────────────────────────────────
     # USBToolBox is a post-install tool — run it inside macOS to generate UTBMap.kext
-    # USB works without it during initial install
     if profile.cpu_generation <= 3:
         add("XHCI-unsupported")
 
@@ -482,6 +496,7 @@ def _find_asset(assets: list, pattern: str) -> Optional[dict]:
 
 
 def _kext_valid(kext_path: Path) -> bool:
+    """A kext is valid if it exists as a dir with Contents/Info.plist inside."""
     return (
         kext_path.is_dir() and
         (kext_path / "Contents" / "Info.plist").exists() and
@@ -530,6 +545,7 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify:
             results[kext.name] = f"ERROR: download failed: {e}"
             continue
 
+        # Verify downloaded zip size matches what GitHub reported
         expected_size = asset.get("size", 0)
         actual_size = zip_path.stat().st_size
         if expected_size and abs(actual_size - expected_size) > 1024:

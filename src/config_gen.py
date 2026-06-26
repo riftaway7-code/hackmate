@@ -3,6 +3,7 @@ from pathlib import Path
 from hardware import HardwareProfile
 from kexts import KextEntry, select_kexts, get_alc_layout
 from smbios import SMBIOSData
+from platform import IS_WINDOWS, dmi_vendor, cpu_core_count
 
 
 # ─── iGPU framebuffer platform-ids (little-endian bytes) ─────────────────────
@@ -389,24 +390,14 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
 
 
 def _dmi_vendor() -> str:
-    try:
-        return Path("/sys/class/dmi/id/sys_vendor").read_text().strip().lower()
-    except Exception:
-        return ""
+    return dmi_vendor()
 
 
 def _amd_kernel_patches(profile: HardwareProfile) -> list[dict]:
     # Core AMD kernel patches from AMD-OSX
     # These allow AMD CPUs to boot macOS
     # Values from https://github.com/AMD-OSX/AMD_Vanilla
-    try:
-        import subprocess
-        raw = subprocess.run(
-            ["nproc", "--all"], capture_output=True, text=True, timeout=5
-        ).stdout.strip()
-        cores = int(raw) if raw.isdigit() else 8
-    except Exception:
-        cores = 8
+    cores = cpu_core_count()
 
     def amd_patch(comment, base, find, replace, count=1, min_k="", max_k=""):
         return {

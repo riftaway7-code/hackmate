@@ -45,7 +45,13 @@ sudo .venv/bin/python3 src/hackmate.py
 
 > Always use the full path to the venv Python (`.venv/bin/python3`) with `sudo` — not `python3` or `uv run`. sudo does not inherit your PATH so it won't find uv or your user-installed packages.
 
-### Windows
+### Windows (EXE)
+
+Download `HackMate.exe` from the [latest release](https://github.com/riftaway7-code/hackmate/releases/latest) and run as Administrator.
+
+> **Antivirus false positives:** Some AVs (Bkav, Gridinsoft, Zillya) flag the EXE as malware. This is a known false positive with PyInstaller-built executables — every major AV (Defender, Kaspersky, ESET, CrowdStrike, Sophos) reports clean. The EXE is built transparently from source on GitHub Actions: [view build logs](https://github.com/riftaway7-code/hackmate/actions/workflows/build-exe.yml).
+
+### Windows (from source)
 
 > **Must be run as Administrator.** Right-click PowerShell and select "Run as administrator" before running any of these commands.
 

@@ -27,9 +27,9 @@ except ModuleNotFoundError:
     sys.exit(1)
 
 from hardware import scan, HardwareProfile
-from kexts import select_kexts, get_alc_layout
-from smbios import generate as gen_smbios
-from config_gen import generate as gen_config, write_plist, _required_ssdts
+from efi.kexts import select_kexts, get_alc_layout
+from hardware.smbios import generate as gen_smbios
+from efi.config_gen import generate as gen_config, write_plist, _required_ssdts
 from recovery import compatible_versions, download_recovery, MacOSVersion
 
 
@@ -694,7 +694,7 @@ class InstallScreen(Screen):
             # ── 4. Generate SMBIOS ────────────────────────────────────────────
             ui(35, "Generating SMBIOS...")
             log("── Generating SMBIOS...", "header")
-            from smbios import generate as gen_smbios, SMBIOSData
+            from hardware.smbios import generate as gen_smbios, SMBIOSData
             smbios = None
 
             # In repair mode, reuse existing SMBIOS so serial/MLB/UUID stay the same
@@ -729,7 +729,7 @@ class InstallScreen(Screen):
             # ── 5. Generate config.plist ──────────────────────────────────────
             ui(40, "Generating config.plist...")
             log("── Generating config.plist...", "header")
-            from config_gen import generate as gen_config, write_plist, _required_ssdts
+            from efi.config_gen import generate as gen_config, write_plist, _required_ssdts
             config = gen_config(profile, smbios)
             config_path = oc_dir / "config.plist"
             write_plist(config, config_path)
@@ -738,7 +738,7 @@ class InstallScreen(Screen):
             # ── 6. Download kexts ─────────────────────────────────────────────
             ui(45, "Selecting kexts...")
             log("── Selecting kexts...", "header")
-            from kexts import select_kexts, download_kexts
+            from efi.kexts import select_kexts, download_kexts
             kexts = select_kexts(profile)
             log(f"  {len(kexts)} kexts selected for this hardware", "ok")
 
@@ -846,7 +846,7 @@ class InstallScreen(Screen):
             ssdts = _required_ssdts(profile, kexts)
             log(f"  Need: {', '.join(ssdts)}", "info")
 
-            from ssdt import generate as gen_ssdts
+            from efi.ssdt import generate as gen_ssdts
             ssdt_results = gen_ssdts(
                 needed=ssdts,
                 acpi_dir=acpi_dir,
@@ -899,7 +899,7 @@ class InstallScreen(Screen):
             ui(97, "Running EFI sanity check...")
             log("", "info")
             log("── EFI Sanity Check ──────────────────────────────", "header")
-            from efi_check import check as efi_check
+            from efi.efi_check import check as efi_check
             issues = efi_check(efi, profile)
             errors   = [m for lvl, m in issues if lvl == "error"]
             warnings = [m for lvl, m in issues if lvl == "warn"]

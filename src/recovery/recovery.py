@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 
 MACRECOVERY_URL = "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Utilities/macrecovery/macrecovery.py"
-MACRECOVERY_PATH = Path(__file__).parent / "macrecovery.py"
+MACRECOVERY_PATH = Path(__file__).parent.parent / "macrecovery.py"
 
 
 @dataclass

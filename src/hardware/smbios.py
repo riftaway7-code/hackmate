@@ -2,7 +2,7 @@ import random
 import uuid
 import string
 from dataclasses import dataclass
-from hardware import HardwareProfile
+from hardware.detect import HardwareProfile
 
 
 @dataclass

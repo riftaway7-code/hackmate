@@ -21,7 +21,7 @@ from typing import Optional
 from compat import IS_WINDOWS, get_dsdt, find_iasl, chmod_iasl
 
 SSDTTIME_ZIP_URL = "https://github.com/corpnewt/SSDTTime/archive/refs/heads/master.zip"
-SSDTTIME_DIR = Path(__file__).parent / "_ssdttime"
+SSDTTIME_DIR = Path(__file__).parent.parent / "_ssdttime"
 
 # Map our SSDT names → keywords to search for in SSDTTime's menu output
 SSDT_MENU_KEYWORDS: dict[str, list[str]] = {

@@ -12,9 +12,11 @@ BRANCH  = "main"
 API_URL = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
 
 FILES = [
-    "hackmate.py", "hardware.py", "kexts.py", "config_gen.py",
-    "smbios.py", "recovery.py", "ssdt.py", "updater.py",
-    "efi_check.py", "compat.py",
+    "hackmate.py", "compat.py", "updater.py",
+    "hardware/__init__.py", "hardware/detect.py", "hardware/smbios.py",
+    "efi/__init__.py", "efi/config_gen.py", "efi/kexts.py",
+    "efi/ssdt.py", "efi/efi_check.py",
+    "recovery/__init__.py", "recovery/recovery.py",
 ]
 
 
@@ -42,9 +44,11 @@ def check_and_update(silent: bool = False) -> bool:
     for filename in FILES:
         url = f"https://raw.githubusercontent.com/{REPO}/{sha}/src/{filename}"
         try:
+            dest = src_dir / filename
+            dest.parent.mkdir(parents=True, exist_ok=True)
             req = urllib.request.Request(url, headers={"User-Agent": "HackMate/1.0"})
             with urllib.request.urlopen(req, timeout=15) as r:
-                (src_dir / filename).write_bytes(r.read())
+                dest.write_bytes(r.read())
             print(f"  ✓ {filename}")
         except Exception:
             print(f"  ✗ {filename}")

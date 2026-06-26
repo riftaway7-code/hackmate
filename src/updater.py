@@ -17,15 +17,18 @@ VERSION_FILE = Path(__file__).parent / ".version"
 
 FILES = [
     "hackmate.py",
-    "hardware.py",
-    "kexts.py",
-    "config_gen.py",
-    "smbios.py",
-    "recovery.py",
-    "ssdt.py",
-    "updater.py",
-    "efi_check.py",
     "compat.py",
+    "updater.py",
+    "hardware/__init__.py",
+    "hardware/detect.py",
+    "hardware/smbios.py",
+    "efi/__init__.py",
+    "efi/config_gen.py",
+    "efi/kexts.py",
+    "efi/ssdt.py",
+    "efi/efi_check.py",
+    "recovery/__init__.py",
+    "recovery/recovery.py",
 ]
 
 
@@ -49,6 +52,7 @@ def _download_file(filename: str, sha: str) -> bool:
     url = f"https://raw.githubusercontent.com/{REPO}/{sha}/src/{filename}"
     dest = Path(__file__).parent / filename
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         req = urllib.request.Request(url, headers={"User-Agent": "HackMate/1.0"})
         with urllib.request.urlopen(req, timeout=15) as r:
             dest.write_bytes(r.read())

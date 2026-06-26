@@ -1,8 +1,8 @@
 import plistlib
 from pathlib import Path
 from hardware import HardwareProfile
-from kexts import KextEntry, select_kexts, get_alc_layout
-from smbios import SMBIOSData
+from efi.kexts import KextEntry, select_kexts, get_alc_layout
+from hardware.smbios import SMBIOSData
 from compat import IS_WINDOWS, dmi_vendor, cpu_core_count
 
 
@@ -707,7 +707,7 @@ def write_plist(config: dict, path: Path):
 
 if __name__ == "__main__":
     from hardware import scan
-    from smbios import generate as gen_smbios
+    from hardware.smbios import generate as gen_smbios
 
     profile = scan()
     smbios = gen_smbios(profile)

@@ -842,7 +842,7 @@ class InstallScreen(Screen):
                 extras_dir = Path(mount) / "EFI" / "HackMate-Extras"
                 ok = download_heliport(
                     extras_dir,
-                    progress_cb=lambda m: self.app.call_from_thread(log, f"  {m}", "info")
+                    progress_cb=lambda m: log(f"  {m}", "info")
                 )
                 if ok:
                     log("  HeliPort saved to EFI/HackMate-Extras/ on USB", "ok")

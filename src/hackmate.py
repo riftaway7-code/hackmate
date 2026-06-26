@@ -1518,9 +1518,9 @@ class BIOSChecklistScreen(Screen):
 def _get_version() -> str:
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v1.2.1 ({sha})"
+        return f"v1.3.0 ({sha})"
     except Exception:
-        return "v1.2.1"
+        return "v1.3.0"
 
 VERSION = _get_version()
 

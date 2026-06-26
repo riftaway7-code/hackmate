@@ -1,63 +1,46 @@
 # HackMate
+Automates the entire process of creating a bootable OpenCore hackintosh USB. No manual config.plist editing, no hunting down kexts, no macrecovery commands.
+
+Supports Linux, Windows, and macOS as host operating systems.
+
+---
 
 ## 📢 Announcements
 
-**If you cloned before June 25th (using `hackmate-linux/` or `hackmate-windows/`):**
-The codebase has been unified. Re-clone and use `src/` instead:
-```bash
-git clone https://github.com/riftaway7-code/hackmate.git
-cd hackmate/src
-sudo python3 hackmate.py   # Linux/macOS
-```
-The old `hackmate-linux/` and `hackmate-windows/` folders no longer exist.
+**If you cloned before June 25th (running from `hackmate-linux/`):**
+Just run your usual command — HackMate will auto-migrate itself to the new `src/` layout and relaunch. No manual steps needed.
 
 **If you're on macOS and got a `lspci not found` error:**
-macOS is now a supported host OS. Pull the latest and re-run from `src/`:
+macOS is now fully supported. Just update and re-run:
 ```bash
-git pull
-cd src
-sudo python3 hackmate.py
+git pull && sudo python3 src/hackmate.py
 ```
 
 **If USB formatting fails on Windows:**
-This is a known issue being investigated. Workaround: manually format your USB as FAT32 in Disk Management, then re-run HackMate — it will detect the drive and skip the format step.
+Known issue, being investigated. Workaround: manually format your USB as FAT32 in Disk Management, then re-run HackMate.
 
 ---
 
-Automates the entire process of creating a bootable OpenCore hackintosh USB. No manual config.plist editing, no hunting down kexts, no macrecovery commands.
+## Install
 
-## Platform
-
-`src/` works on Linux, Windows, and macOS from a single codebase.
-
----
-
-## Linux / macOS
-
-**Requirements:** Python 3.10+, root access
-
+### Linux / macOS
 ```bash
 git clone https://github.com/riftaway7-code/hackmate.git
 cd hackmate
 python3 setup.py
-cd src
-sudo python3 hackmate.py
+sudo python3 src/hackmate.py
 ```
 
-## Windows
-
-**Requirements:** Python 3.10+, administrator access
-
+### Windows
 ```powershell
 git clone https://github.com/riftaway7-code/hackmate.git
 cd hackmate
 python setup.py
-cd src
-# Right-click → Run as Administrator, or from an admin terminal:
-python hackmate.py
+# Run as Administrator:
+python src\hackmate.py
 ```
 
-> macOS is supported (real Macs and hackintoshes). Uses `system_profiler` for hardware detection and `diskutil` for USB formatting.
+> `setup.py` installs required dependencies. HackMate will also tell you if anything is missing when you launch it.
 
 ---
 

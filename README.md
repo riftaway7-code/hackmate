@@ -13,7 +13,7 @@ Supports Linux, Windows, and macOS as host operating systems.
 
 ## 📢 Announcements
 
-**v1.2.0 is out** — `git pull` to get the latest. Includes full AMD vanilla kernel patches, OpenCore log reader, and a post-install guide. HackMate will also prompt you to update automatically on launch.
+**v1.2.1 is out** — `git pull` to get the latest. Intel WiFi users now get a choice between itlwm and native AirportItlwm. SSDT-XOSI now generates from a template instead of silently skipping. BIOS checklist screen shows after USB is built. More Intel GPU IDs for accurate gen detection.
 
 **If you cloned before June 25th (running from `hackmate-linux/`):**
 Just run your usual command — HackMate will auto-migrate itself to the new `src/` layout and relaunch. No manual steps needed.

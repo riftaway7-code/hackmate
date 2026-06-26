@@ -31,7 +31,7 @@ SSDT_MENU_KEYWORDS: dict[str, list[str]] = {
     "SSDT-PNLF":    ["pnlf", "backlight"],
     "SSDT-AWAC":    ["awac"],
     "SSDT-GPI0":    ["gpi0", "gpio"],
-    "SSDT-XOSI":    ["xosi"],
+    "SSDT-XOSI":    ["xosi", "fakeosi", "fake osi"],
     "SSDT-HPET":    ["fixhpet", "hpet", "irq conflict"],
     "SSDT-PMC":     ["pmc", "pmcr"],
     "SSDT-USBX":    ["usbx"],
@@ -39,6 +39,33 @@ SSDT_MENU_KEYWORDS: dict[str, list[str]] = {
 
 # SSDTs SSDTTime has no equivalent for (none currently — THINK/TBHP removed from pipeline)
 MANUAL_SSDTS: set[str] = set()
+
+XOSI_DSL_TEMPLATE = """\
+DefinitionBlock ("", "SSDT", 2, "ACDT", "OsIdXosi", 0x00000000)
+{{
+    Method (XOSI, 1, NotSerialized)
+    {{
+        If (_OSI ("Darwin"))
+        {{
+            Return (Zero)
+        }}
+        If (Arg0 == "Windows 2009") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2012") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2013") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2015") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2016") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2017") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2017.2") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2018") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2018.2") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2019") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2020") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2021") {{ Return (0xFFFFFFFF) }}
+        If (Arg0 == "Windows 2022") {{ Return (0xFFFFFFFF) }}
+        Return (_OSI (Arg0))
+    }}
+}}
+"""
 
 GPIO_DSL_TEMPLATE = """\
 DefinitionBlock ("", "SSDT", 2, "CORP", "SsdtGpio", 0x00001000)
@@ -60,6 +87,24 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "SsdtGpio", 0x00001000)
     }}
 }}
 """
+
+def _build_xosi_ssdt(acpi_dir: Path, ssdttime_dir: Path) -> bool:
+    """Compile SSDT-XOSI.aml from template. No DSDT inspection needed."""
+    try:
+        dsl_file = acpi_dir / "SSDT-XOSI.dsl"
+        dsl_file.write_text(XOSI_DSL_TEMPLATE)
+        iasl = find_iasl(ssdttime_dir)
+        if not iasl:
+            return False
+        subprocess.run([str(iasl), str(dsl_file)], capture_output=True, timeout=15)
+        try:
+            dsl_file.unlink()
+        except Exception:
+            pass
+        return (acpi_dir / "SSDT-XOSI.aml").exists()
+    except Exception:
+        return False
+
 
 def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path, ssdt_name: str = "SSDT-GPI0") -> bool:
     """Compile SSDT-GPI0.aml from the DSDT's GPI0 device path. Returns True on success."""
@@ -251,6 +296,17 @@ def generate(
             if ok:
                 cb(f"  {ssdt}.aml")
             continue
+
+        # SSDT-XOSI: try SSDTTime first, fall back to built-in template
+        if ssdt == "SSDT-XOSI":
+            choice = menu_map.get(ssdt)
+            if not choice:
+                cb("Generating SSDT-XOSI from template (SSDTTime doesn't have it)...")
+                ok = _build_xosi_ssdt(acpi_dir, script.parent)
+                results[ssdt] = "OK" if ok else "ERROR: could not compile SSDT-XOSI template"
+                if ok:
+                    cb("  SSDT-XOSI.aml")
+                continue
 
         choice = menu_map.get(ssdt)
         if not choice:

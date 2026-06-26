@@ -307,7 +307,7 @@ def _has_card_reader() -> bool:
 
 # ─── Selection logic ──────────────────────────────────────────────────────────
 
-def select_kexts(profile: HardwareProfile) -> list[KextEntry]:
+def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> list[KextEntry]:
     selected: list[KextEntry] = []
     seen: set[str] = set()
 
@@ -405,7 +405,8 @@ def select_kexts(profile: HardwareProfile) -> list[KextEntry]:
     # ── WiFi ──────────────────────────────────────────────────────────────────
     wchip = profile.wifi_chipset
     if wchip == "intel":
-        add("itlwm", "IntelBluetoothFirmware", "IntelBTPatcher", "BlueToolFixup")
+        chosen = "AirportItlwm" if wifi_kext_mode == "AirportItlwm" else "itlwm"
+        add(chosen, "IntelBluetoothFirmware", "IntelBTPatcher", "BlueToolFixup")
     elif wchip == "broadcom":
         add("AirportBrcmFixup", "BrcmPatchRAM3", "BrcmFirmwareData", "BrcmBluetoothInjector", "BlueToolFixup")
     elif wchip == "atheros":

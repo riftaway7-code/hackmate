@@ -258,7 +258,7 @@ class ScanScreen(Screen):
         self.app.call_from_thread(self._show_results, profile)
 
     def _show_results(self, profile: HardwareProfile) -> None:
-        kexts = select_kexts(profile)
+        kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
         layout = get_alc_layout(profile.audio_codec)
         lines = [
             f"  CPU       {profile.cpu_name}",
@@ -373,6 +373,49 @@ class USBScreen(Screen):
 
 # ─── Build Mode ───────────────────────────────────────────────────────────────
 
+class WiFiKextScreen(Screen):
+    """Ask user: itlwm (HeliPort) vs AirportItlwm (native, macOS-version-specific)."""
+    def __init__(self, device: str, repair: bool, skip_format: bool):
+        super().__init__()
+        self.device = device
+        self.repair = repair
+        self.skip_format = skip_format
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Intel WiFi Mode ──────────────────────────────────────", classes="title"),
+                Static(""),
+                Static("  Intel WiFi detected. Choose your WiFi kext:", classes="info"),
+                Static(""),
+                Static("  Standard (itlwm + HeliPort)", classes="info"),
+                Static("    Works with ALL macOS versions. Requires HeliPort app for menu bar icon.", classes="info"),
+                Static("    Best if you plan to upgrade macOS later.", classes="info"),
+                Static(""),
+                Static("  Native AirportBSD (AirportItlwm)", classes="info"),
+                Static("    Shows as built-in WiFi — no HeliPort needed.", classes="info"),
+                Static("    ⚠  Tied to your macOS version. Must swap the kext after upgrading.", classes="info"),
+                Static(""),
+                Button("Standard (itlwm + HeliPort)",  id="itlwm",         classes="primary"),
+                Button("Native (AirportItlwm)",         id="airportitlwm",  classes="primary"),
+                Button("← Back",                        id="back",          classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "itlwm":
+            self.app.wifi_kext_mode = "itlwm"
+            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+        elif event.button.id == "airportitlwm":
+            self.app.wifi_kext_mode = "AirportItlwm"
+            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+        elif event.button.id == "back":
+            self.app.pop_screen()
+
+
 class BuildModeScreen(Screen):
     def __init__(self, device: str):
         super().__init__()
@@ -398,13 +441,20 @@ class BuildModeScreen(Screen):
         )
         yield Footer()
 
+    def _next_screen(self, repair: bool, skip_format: bool) -> None:
+        profile: HardwareProfile = self.app.profile
+        if getattr(profile, "wifi_chipset", "") == "intel":
+            self.app.push_screen(WiFiKextScreen(self.device, repair=repair, skip_format=skip_format))
+        else:
+            self.app.push_screen(ConfirmScreen(self.device, repair=repair, skip_format=skip_format))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "full":
-            self.app.push_screen(ConfirmScreen(self.device, repair=False, skip_format=False))
+            self._next_screen(repair=False, skip_format=False)
         elif event.button.id == "skip_format":
-            self.app.push_screen(ConfirmScreen(self.device, repair=False, skip_format=True))
+            self._next_screen(repair=False, skip_format=True)
         elif event.button.id == "repair":
-            self.app.push_screen(ConfirmScreen(self.device, repair=True, skip_format=False))
+            self._next_screen(repair=True, skip_format=False)
         elif event.button.id == "back":
             self.app.pop_screen()
 
@@ -756,7 +806,7 @@ class InstallScreen(Screen):
             ui(45, "Selecting kexts...")
             log("── Selecting kexts...", "header")
             from kexts import select_kexts, download_kexts
-            kexts = select_kexts(profile)
+            kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
             log(f"  {len(kexts)} kexts selected for this hardware", "ok")
 
             ui(50, f"{'Verifying' if repair else 'Downloading'} {len(kexts)} kexts...")
@@ -957,9 +1007,13 @@ class InstallScreen(Screen):
             log("  USB is ready!", "ok")
             if manual:
                 log("  ! Some SSDTs need manual install (see README_MANUAL_SSDTS.txt)", "warn")
-            log("  1. Boot from the USB to install macOS", "info")
-            log("  2. After install: run USBToolBox to map USB ports", "info")
+            log("  Configure BIOS settings, then boot from the USB.", "info")
             log("══════════════════════════════════════════════════", "header")
+            if not repair:
+                self.app.call_from_thread(
+                    self.app.push_screen,
+                    BIOSChecklistScreen(version.name, device)
+                )
 
         except Exception as e:
             ui(0, f"Error: {e}")
@@ -977,14 +1031,71 @@ class InstallScreen(Screen):
             self.app.pop_screen()
 
 
+# ─── BIOS Checklist ──────────────────────────────────────────────────────────
+
+class BIOSChecklistScreen(Screen):
+    """Show what BIOS settings to configure before booting the USB."""
+    def __init__(self, version_name: str, device: str):
+        super().__init__()
+        self.version_name = version_name
+        self.device = device
+
+    def compose(self) -> ComposeResult:
+        profile: HardwareProfile = self.app.profile
+        is_amd = getattr(profile, "cpu_vendor", "") == "amd"
+        has_nvidia = getattr(profile, "gpu_vendor", "") == "nvidia"
+
+        items = [
+            ("Disable Secure Boot",       "Security > Secure Boot → Disabled"),
+            ("Disable Fast Boot",         "Boot > Fast Boot → Disabled  (or Thorough)"),
+            ("Set USB as first boot",     "Boot Order → move your USB to top"),
+            ("Enable XHCI Handoff",       "USB > XHCI Hand-off → Enabled  (USB 3.0 in macOS)"),
+            ("Disable CSM / Legacy Boot", "Boot > CSM → Disabled  (UEFI only)"),
+            ("Set DVMT pre-alloc ≥ 64MB", "Advanced > Video > DVMT Pre-Allocated → 64M or higher"),
+        ]
+        if is_amd:
+            items.append(("Disable Above 4G Decoding", "Advanced > PCI > Above 4G Decoding → Disabled  (AMD boot fix)"))
+        if has_nvidia:
+            items.append(("Disable dGPU (if dual GPU)", "Advanced > GPU → Discrete GPU Disabled  (Nvidia unsupported)"))
+
+        rows = []
+        for title, detail in items:
+            rows.append(Static(f"  ◻  {title}", classes="info"))
+            rows.append(Static(f"       {detail}", classes="info"))
+            rows.append(Static(""))
+
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Before You Boot ──────────────────────────────────────", classes="title"),
+                Static(""),
+                Static(f"  USB ready: {self.version_name} on {self.device}", classes="ok"),
+                Static(""),
+                Static("  Configure these BIOS settings first:", classes="warn"),
+                Static("  (Location varies by motherboard — check your manual)", classes="info"),
+                Static(""),
+                *rows,
+                Static("  Then boot from USB. At OpenCore picker, select the macOS installer.", classes="info"),
+                Static(""),
+                Button("Got it — I'm done", id="done", classes="primary"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "done":
+            self.app.pop_screen()
+
+
 # ─── App ──────────────────────────────────────────────────────────────────────
 
 def _get_version() -> str:
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v1.1.0 ({sha})"
+        return f"v1.2.1 ({sha})"
     except Exception:
-        return "v1.1.0"
+        return "v1.2.1"
 
 VERSION = _get_version()
 
@@ -993,8 +1104,9 @@ class HackMate(App):
     TITLE = "HackMate"
     SUB_TITLE = VERSION
 
-    profile:      HardwareProfile | None = None
-    macos_version: MacOSVersion   | None = None
+    profile:        HardwareProfile | None = None
+    macos_version:  MacOSVersion   | None = None
+    wifi_kext_mode: str                   = "itlwm"
 
     def on_mount(self) -> None:
         self.push_screen(WelcomeScreen())

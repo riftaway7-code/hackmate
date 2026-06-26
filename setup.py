@@ -124,18 +124,14 @@ def print_instructions():
 
 def print_uv_instructions():
     """Print uv-specific run instructions."""
+    venv_python = get_venv_python()
     print("\nAll dependencies installed. You can now run HackMate:\n")
     if sys.platform == "win32":
-        print(f"  uv run src\\hackmate.py  (as Administrator)")
-    else:
-        print(f"  sudo uv run src/hackmate.py")
-    print()
-    print("Or use the venv directly:")
-    venv_python = get_venv_python()
-    if sys.platform == "win32":
-        print(f"  sudo {venv_python} src\\hackmate.py")
+        print(f"  {venv_python} src\\hackmate.py  (as Administrator)")
     else:
         print(f"  sudo {venv_python} src/hackmate.py")
+    print()
+    print("  NOTE: Do not use 'sudo uv run' — sudo won't find uv in your PATH.")
 
 
 def main():

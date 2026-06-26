@@ -291,10 +291,65 @@ class BuildModeScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "full":
-            self.app.push_screen(InstallScreen(self.device, repair=False))
+            self.app.push_screen(ConfirmScreen(self.device, repair=False))
         elif event.button.id == "repair":
-            self.app.push_screen(InstallScreen(self.device, repair=True))
+            self.app.push_screen(ConfirmScreen(self.device, repair=True))
         elif event.button.id == "back":
+            self.app.pop_screen()
+
+
+# ─── Confirm Screen ───────────────────────────────────────────────────────────
+
+class ConfirmScreen(Screen):
+    def __init__(self, device: str, repair: bool = False):
+        super().__init__()
+        self.device = device
+        self.repair = repair
+
+    def compose(self) -> ComposeResult:
+        import subprocess, re
+        disk = re.sub(r'p?\d+$', '', self.device) if re.search(r'\d$', self.device) else self.device
+
+        # Get disk model and size
+        try:
+            model = subprocess.run(
+                ["lsblk", "-dno", "MODEL", disk], capture_output=True, text=True
+            ).stdout.strip() or "Unknown"
+            size = subprocess.run(
+                ["lsblk", "-dno", "SIZE", disk], capture_output=True, text=True
+            ).stdout.strip() or "?"
+        except Exception:
+            model, size = "Unknown", "?"
+
+        action = "Repair EFI on" if self.repair else "FORMAT AND WRITE TO"
+        warn = "This will update OpenCore, kexts, and config on the existing USB." if self.repair else \
+               "ALL DATA ON THIS DRIVE WILL BE PERMANENTLY ERASED."
+
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Confirm ───────────────────────────────────────────────", classes="title"),
+                Static(""),
+                Static(f"  Target device:  {self.device}", classes="info"),
+                Static(f"  Disk model:     {model}", classes="info"),
+                Static(f"  Disk size:      {size}", classes="info"),
+                Static(""),
+                Static(f"  Action: {action} {self.device}", classes="info"),
+                Static(f"  ⚠  {warn}", classes="warn"),
+                Static(""),
+                Static("  Are you sure you want to continue?", classes="info"),
+                Static(""),
+                Button("Yes, proceed",  id="confirm", classes="primary"),
+                Button("← Cancel",      id="cancel",  classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            self.app.push_screen(InstallScreen(self.device, repair=self.repair))
+        elif event.button.id == "cancel":
             self.app.pop_screen()
 
 
@@ -417,7 +472,7 @@ class InstallScreen(Screen):
 
         try:
             if repair:
-                # ── Repair: just mount existing partition ─────────────────────
+                # ── Repair: mount and backup existing EFI before touching it ──
                 ui(2, "Mounting existing USB partition...")
                 log("── Repair mode: skipping format and recovery download", "header")
                 for part in sorted(glob.glob(f"{disk}*")):
@@ -425,6 +480,15 @@ class InstallScreen(Screen):
                 mount.mkdir(parents=True, exist_ok=True)
                 cmd(["mount", part_device, str(mount)], check=True, capture_output=True)
                 log(f"Mounted {part_device} at {mount}", "ok")
+
+                # Backup existing EFI before any changes
+                existing_efi = mount / "EFI"
+                if existing_efi.exists():
+                    import shutil, datetime
+                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    backup_path = Path(f"/tmp/hackmate_efi_backup_{ts}")
+                    shutil.copytree(str(existing_efi), str(backup_path))
+                    log(f"── EFI backed up to {backup_path}", "ok")
             else:
                 # ── 1. Format USB ─────────────────────────────────────────────
                 ui(2, "Formatting USB as FAT32...")

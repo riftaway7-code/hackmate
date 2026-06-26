@@ -97,7 +97,7 @@ SMBIOS_MAP = {
     (4, "laptop"):  "MacBookPro11,1",
     (5, "laptop"):  "MacBookPro12,1",
     (6, "laptop"):  "MacBookPro13,1",
-    (7, "laptop"):  "MacBookPro14,1",
+    (7, "laptop"):  "MacBookPro16,1",
     (8, "laptop"):  "MacBookPro15,2",
     (10, "laptop"): "MacBookPro16,2",
     (11, "laptop"): "MacBookPro18,1",

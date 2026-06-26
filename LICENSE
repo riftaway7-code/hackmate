@@ -2,10 +2,6 @@ MIT License
 
 Copyright (c) 2026 riftaway7-code
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-GRANT OF LICENSE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -16,41 +12,45 @@ furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DISCLAIMER OF WARRANTIES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE AUTHORS
-AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR WARRANTIES OF ANY KIND
-CONCERNING THE SOFTWARE, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE,
-INCLUDING WITHOUT LIMITATION WARRANTIES OF TITLE, MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, OR THE ABSENCE OF LATENT OR
-OTHER DEFECTS, ACCURACY, OR THE PRESENCE OR ABSENCE OF ERRORS, WHETHER OR
-NOT DISCOVERABLE.
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
+
+ADDITIONAL TERMS AND DISCLAIMERS
+
+These additional terms supplement the MIT License above and do not replace it.
+
+DISCLAIMER OF WARRANTIES
+
+The authors and copyright holders make no representations or warranties of any
+kind concerning the Software, whether express, implied, statutory, or otherwise,
+including without limitation warranties of title, merchantability, fitness for a
+particular purpose, non-infringement, or the absence of latent or other defects,
+accuracy, or the presence or absence of errors, whether or not discoverable.
+
 LIMITATION OF LIABILITY
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
-OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE
-USE OR OTHER DEALINGS IN THE SOFTWARE. THIS INCLUDES BUT IS NOT LIMITED TO:
+In no event shall the authors or copyright holders be liable for any claim,
+damages, or other liability arising from, out of, or in connection with the
+Software or the use or other dealings in the Software. This includes but is
+not limited to:
 
-  • Loss of data, files, or storage media resulting from use of this software
-  • Damage to hardware, firmware, or system configurations
-  • Violations of any third-party end-user license agreements (EULAs),
-    terms of service, or applicable laws in your jurisdiction
-  • Any indirect, incidental, special, exemplary, or consequential damages,
+  - Loss of data, files, or storage media resulting from use of this software
+  - Damage to hardware, firmware, or system configurations
+  - Violations of any third-party end-user license agreements, terms of service,
+    or applicable laws in your jurisdiction
+  - Any indirect, incidental, special, exemplary, or consequential damages,
     even if the authors have been advised of the possibility of such damages
-  • Any claims brought by third parties arising out of or relating to your
+  - Any claims brought by third parties arising out of or relating to your
     use, distribution, or modification of the Software
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EDUCATIONAL AND RESEARCH PURPOSE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 This software is developed and distributed for educational, research, and
 personal experimentation purposes only. HackMate automates the generation of
@@ -64,17 +64,13 @@ solely and entirely responsible for ensuring that their use of this software
 complies with all applicable laws, regulations, and third-party terms of
 service in their jurisdiction.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORKS, MODIFICATIONS, AND REDISTRIBUTION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Any person or entity that forks, modifies, redistributes, or otherwise derives
 a work from this Software assumes full and sole legal responsibility for that
-derivative work and any consequences arising from it. The original authors
-bear no responsibility whatsoever for the actions, content, or legal standing
-of any fork or redistribution of this Software. Attribution to the original
-project is appreciated but not legally required beyond the conditions stated
-above.
+derivative work and any consequences arising from it. The original authors bear
+no responsibility whatsoever for the actions, content, or legal standing of
+any fork or redistribution of this Software.
 
 If you distribute a modified version of this Software, you must:
 
@@ -82,17 +78,11 @@ If you distribute a modified version of this Software, you must:
      portions of the Software.
   2. Clearly indicate that changes were made and that the modified version is
      not the original HackMate project.
-  3. Not use the name "HackMate" or any confusingly similar name in a way
-     that implies endorsement by the original authors without prior written
-     permission.
+  3. Not use the name "HackMate" in a way that implies endorsement by the
+     original authors without prior written permission.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACCEPTANCE OF TERMS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 By downloading, cloning, running, modifying, or distributing this Software,
 you acknowledge that you have read, understood, and agree to be bound by the
-terms of this license. If you do not agree to these terms, you must not use
-this Software.
-
-Use of this Software is entirely at your own risk.
+terms of this license. Use of this Software is entirely at your own risk.

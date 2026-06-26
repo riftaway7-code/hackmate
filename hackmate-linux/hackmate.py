@@ -15,7 +15,7 @@ if check_and_update():
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Label, Button, ListView, ListItem, ProgressBar, Static, RichLog, LoadingIndicator
+from textual.widgets import Header, Footer, Label, Button, ListView, ListItem, ProgressBar, Static, RichLog, LoadingIndicator, Input
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
 from textual.screen import Screen
 from textual import work
@@ -86,8 +86,9 @@ class WelcomeScreen(Screen):
                 Static(BANNER,     classes="title",    id="banner"),
                 Static("Automated OpenCore EFI builder — any hardware", classes="info", id="subtitle"),
                 Static(""),
-                Button("Build EFI", id="start",  classes="primary"),
-                Button("Quit",      id="quit",   classes="danger"),
+                Button("Build EFI",    id="start",   classes="primary"),
+                Button("Restore EFI",  id="restore", classes="primary"),
+                Button("Quit",         id="quit",    classes="danger"),
                 id="welcome-inner"
             ),
             id="welcome"
@@ -97,8 +98,121 @@ class WelcomeScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start":
             self.app.push_screen(ScanScreen())
+        elif event.button.id == "restore":
+            self.app.push_screen(RestoreScreen())
         elif event.button.id == "quit":
             self.app.exit()
+
+
+# ─── Restore Screen ───────────────────────────────────────────────────────────
+
+class RestoreScreen(Screen):
+    def compose(self) -> ComposeResult:
+        backup_dir = Path.home() / "HackMate" / "backups"
+        self.backups = sorted(backup_dir.glob("EFI_backup_*.zip"), reverse=True) if backup_dir.exists() else []
+        self.usb_drives = get_usb_drives()
+
+        backup_items = [
+            ListItem(Label(f"  {b.stem}  ({b.stat().st_size // 1024}KB)"))
+            for b in self.backups
+        ] or [ListItem(Label("  No backups found"))]
+
+        usb_items = [
+            ListItem(Label(f"  {name}   {size}   {label}"))
+            for name, size, label in self.usb_drives
+        ] or [ListItem(Label("  No USB drives detected"))]
+
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Restore EFI from Backup ──────────────────────────────", classes="title"),
+                Static(""),
+                Static("  Select backup:", classes="info"),
+                ListView(*backup_items, id="backup-list"),
+                Static(""),
+                Static("  Restore to USB:", classes="info"),
+                ListView(*usb_items, id="usb-list"),
+                Static(""),
+                Button("Restore",  id="restore", classes="primary"),
+                Button("← Back",   id="back",    classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "restore":
+            if not self.backups or not self.usb_drives:
+                return
+            b_idx = self.query_one("#backup-list", ListView).index or 0
+            u_idx = self.query_one("#usb-list",    ListView).index or 0
+            backup = self.backups[b_idx]
+            device = self.usb_drives[u_idx][0]
+            self.app.push_screen(RestoreConfirmScreen(backup, device))
+        elif event.button.id == "back":
+            self.app.pop_screen()
+
+
+class RestoreConfirmScreen(Screen):
+    def __init__(self, backup: Path, device: str):
+        super().__init__()
+        self.backup = backup
+        self.device = device
+
+    def compose(self) -> ComposeResult:
+        self.confirm_phrase = f"RESTORE {self.device}"
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Confirm Restore ───────────────────────────────────────", classes="title"),
+                Static(""),
+                Static(f"  Backup:  {self.backup.stem}", classes="info"),
+                Static(f"  Target:  {self.device}", classes="info"),
+                Static(""),
+                Static("  ⚠  This will overwrite the EFI partition on the target USB.", classes="warn"),
+                Static(f"  To continue, type:  {self.confirm_phrase}", classes="info"),
+                Static(""),
+                Input(placeholder=self.confirm_phrase, id="confirm-input"),
+                Static(""),
+                Button("Restore",   id="confirm", classes="primary"),
+                Button("← Cancel",  id="cancel",  classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            typed = self.query_one("#confirm-input", Input).value.strip()
+            if typed != self.confirm_phrase:
+                self.query_one("#confirm-input", Input).placeholder = f"Type exactly: {self.confirm_phrase}"
+                return
+            self._do_restore()
+        elif event.button.id == "cancel":
+            self.app.pop_screen()
+
+    @work(thread=True)
+    def _do_restore(self) -> None:
+        import zipfile as zf, re
+        disk = re.sub(r'p?\d+$', '', self.device) if re.search(r'\d$', self.device) else self.device
+        part_device = (disk + "p1") if disk[-1].isdigit() else (disk + "1")
+        mount = Path("/tmp/hackmate_restore")
+
+        def notify(msg, level="info"):
+            self.app.call_from_thread(self.app.notify, msg)
+
+        try:
+            mount.mkdir(parents=True, exist_ok=True)
+            subprocess.run(["mount", part_device, str(mount)], check=True, capture_output=True)
+            efi_dest = mount / "EFI"
+            if efi_dest.exists():
+                shutil.rmtree(str(efi_dest))
+            with zf.ZipFile(self.backup, "r") as z:
+                z.extractall(str(mount))
+            subprocess.run(["umount", str(mount)], capture_output=True)
+            notify(f"Restore complete — EFI from {self.backup.stem} written to {self.device}")
+        except Exception as e:
+            notify(f"Restore failed: {e}")
 
 
 # ─── Scanning ─────────────────────────────────────────────────────────────────
@@ -310,7 +424,6 @@ class ConfirmScreen(Screen):
         import subprocess, re
         disk = re.sub(r'p?\d+$', '', self.device) if re.search(r'\d$', self.device) else self.device
 
-        # Get disk model and size
         try:
             model = subprocess.run(
                 ["lsblk", "-dno", "MODEL", disk], capture_output=True, text=True
@@ -321,6 +434,7 @@ class ConfirmScreen(Screen):
         except Exception:
             model, size = "Unknown", "?"
 
+        self.confirm_phrase = f"WRITE {self.device}"
         action = "Repair EFI on" if self.repair else "FORMAT AND WRITE TO"
         warn = "This will update OpenCore, kexts, and config on the existing USB." if self.repair else \
                "ALL DATA ON THIS DRIVE WILL BE PERMANENTLY ERASED."
@@ -337,10 +451,12 @@ class ConfirmScreen(Screen):
                 Static(f"  Action: {action} {self.device}", classes="info"),
                 Static(f"  ⚠  {warn}", classes="warn"),
                 Static(""),
-                Static("  Are you sure you want to continue?", classes="info"),
+                Static(f"  To continue, type:  {self.confirm_phrase}", classes="info"),
                 Static(""),
-                Button("Yes, proceed",  id="confirm", classes="primary"),
-                Button("← Cancel",      id="cancel",  classes="back"),
+                Input(placeholder=self.confirm_phrase, id="confirm-input"),
+                Static(""),
+                Button("Proceed",   id="confirm", classes="primary"),
+                Button("← Cancel",  id="cancel",  classes="back"),
                 classes="screen-inner"
             )
         )
@@ -348,6 +464,10 @@ class ConfirmScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "confirm":
+            typed = self.query_one("#confirm-input", Input).value.strip()
+            if typed != self.confirm_phrase:
+                self.query_one("#confirm-input", Input).placeholder = f"Type exactly: {self.confirm_phrase}"
+                return
             self.app.push_screen(InstallScreen(self.device, repair=self.repair))
         elif event.button.id == "cancel":
             self.app.pop_screen()
@@ -484,11 +604,19 @@ class InstallScreen(Screen):
                 # Backup existing EFI before any changes
                 existing_efi = mount / "EFI"
                 if existing_efi.exists():
-                    import shutil, datetime
+                    import datetime, zipfile as zf
                     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    backup_path = Path(f"/tmp/hackmate_efi_backup_{ts}")
-                    shutil.copytree(str(existing_efi), str(backup_path))
-                    log(f"── EFI backed up to {backup_path}", "ok")
+                    backup_dir = Path.home() / "HackMate" / "backups"
+                    backup_dir.mkdir(parents=True, exist_ok=True)
+                    backup_zip = backup_dir / f"EFI_backup_{ts}.zip"
+                    file_count = 0
+                    with zf.ZipFile(backup_zip, "w", zf.ZIP_DEFLATED) as z:
+                        for f in existing_efi.rglob("*"):
+                            if f.is_file():
+                                z.write(f, f.relative_to(mount))
+                                file_count += 1
+                    size_mb = backup_zip.stat().st_size / 1024 / 1024
+                    log(f"── EFI backed up: {file_count} files, {size_mb:.1f} MB → {backup_zip}", "ok")
             else:
                 # ── 1. Format USB ─────────────────────────────────────────────
                 ui(2, "Formatting USB as FAT32...")

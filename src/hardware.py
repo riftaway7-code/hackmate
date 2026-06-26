@@ -291,7 +291,9 @@ def _infer_intel_gen_from_name(profile: HardwareProfile):
 def _detect_amd_gen(profile: HardwareProfile):
     name = profile.cpu_name.lower()
     if "ryzen" in name or "threadripper" in name:
-        m = re.search(r'(\d{4})', name)
+        # Match model number after "ryzen [pro] N NNNN" — avoids grabbing frequencies or years
+        m = re.search(r'ryzen\s+(?:pro\s+)?(?:threadripper\s+)?(?:\d+\s+)?(\d{4})', name) \
+            or re.search(r'(\d{4})', name)
         if m:
             model = int(m.group(1))
             if model >= 9000:
@@ -535,6 +537,7 @@ def _detect_network_windows(profile: HardwareProfile):
     elif "rtl8111" in name_lower or "rtl8168" in name_lower: profile.ethernet_chipset = "rtl8111"
     elif "rtl8125" in name_lower: profile.ethernet_chipset = "rtl8125"
     elif "rtl8100" in name_lower: profile.ethernet_chipset = "rtl8100"
+    elif "realtek" in name_lower: profile.ethernet_chipset = "rtl8111"  # Realtek PCIe GbE Family Controller
 
     # WiFi
     raw = _ps("""

@@ -1,4 +1,29 @@
 # HackMate
+
+## 📢 Announcements
+
+**If you cloned before June 2026 (using `hackmate-linux/` or `hackmate-windows/`):**
+The codebase has been unified. Re-clone and use `src/` instead:
+```bash
+git clone https://github.com/riftaway7-code/hackmate.git
+cd hackmate/src
+sudo python3 hackmate.py   # Linux/macOS
+```
+The old `hackmate-linux/` and `hackmate-windows/` folders no longer exist.
+
+**If you're on macOS and got a `lspci not found` error:**
+macOS is now a supported host OS. Pull the latest and re-run from `src/`:
+```bash
+git pull
+cd src
+sudo python3 hackmate.py
+```
+
+**If USB formatting fails on Windows:**
+This is a known issue being investigated. Workaround: manually format your USB as FAT32 in Disk Management, then re-run HackMate — it will detect the drive and skip the format step.
+
+---
+
 Automates the entire process of creating a bootable OpenCore hackintosh USB. No manual config.plist editing, no hunting down kexts, no macrecovery commands.
 
 ## Platform

@@ -681,7 +681,7 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData) -> dict:
                 "ApECID":                 0,
                 "AuthRestart":            False,
                 "BlacklistAppleUpdate":   True,
-                "DmgLoading":             "Signed",
+                "DmgLoading":             "Any",
                 "EnablePassword":         False,
                 "ExposeSensitiveData":    6,
                 "HaltLevel":              2147483648,

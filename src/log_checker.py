@@ -1177,11 +1177,14 @@ def analyze(text: str, profile=None) -> list[Finding]:
 
     if log_type == "kernel_panic":
         findings = _analyze_kernel_panic(text)
-        # Also scan for OC patterns — panic files sometimes embed OC log output
+        # Also scan OC patterns — panic files sometimes embed OC log output.
+        # Skip any OC pattern whose category is already covered by the panic parser
+        # (avoids two findings for the same root cause, e.g. IONVMeFamily).
+        covered_categories = {f.category for f in findings if f.confidence in ("definitive", "likely")}
         extra = _analyze_oc_log(text)
-        existing = {f.title for f in findings}
+        existing_titles = {f.title for f in findings}
         for f in extra:
-            if f.title not in existing:
+            if f.title not in existing_titles and f.category not in covered_categories:
                 findings.append(f)
     elif log_type == "oc_log":
         findings = _analyze_oc_log(text)

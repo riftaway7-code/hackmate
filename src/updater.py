@@ -89,6 +89,22 @@ def _ping_launch() -> None:
         pass
 
 
+def _is_frozen() -> bool:
+    """True when running as a PyInstaller-bundled EXE."""
+    return getattr(sys, "frozen", False)
+
+
+def _get_latest_exe_url() -> str | None:
+    """Return the direct download URL for the latest HackMate.exe release asset."""
+    data = _get(f"https://api.github.com/repos/{REPO}/releases/latest")
+    if not data:
+        return None
+    for asset in data.get("assets", []):
+        if asset["name"].endswith(".exe"):
+            return asset["browser_download_url"]
+    return None
+
+
 def check_and_update(silent: bool = False) -> bool:
     _ping_launch()
     print("Checking for updates...", end=" ", flush=True)
@@ -98,9 +114,39 @@ def check_and_update(silent: bool = False) -> bool:
         print("(offline, skipping)")
         return False
 
-    local_sha  = _get_local_sha()
-    base_dir   = Path(__file__).parent
-    missing    = [f for f in FILES if not (base_dir / f).exists()]
+    local_sha = _get_local_sha()
+    base_dir  = Path(__file__).parent
+
+    # When running as a frozen EXE, we can't update .py files —
+    # the bundle is read-only. Instead, point the user to the new release.
+    if _is_frozen():
+        if remote_sha == local_sha:
+            print("up to date.")
+            return False
+
+        short     = remote_sha[:7]
+        changelog = _get_changelog(local_sha, remote_sha) if local_sha else []
+        exe_url   = _get_latest_exe_url()
+
+        print(f"new version available ({short})\n")
+        if changelog:
+            print("  What's new:")
+            for msg in changelog:
+                print(f"    • {msg}")
+        print()
+        print("  To update, download the new HackMate.exe from:")
+        print(f"  https://github.com/{REPO}/releases/latest")
+        if exe_url:
+            print(f"  Direct link: {exe_url}")
+        print()
+        try:
+            input("  Press Enter to continue with the current version...")
+        except (EOFError, KeyboardInterrupt):
+            pass
+        return False
+
+    # Running from source — update .py files as normal
+    missing = [f for f in FILES if not (base_dir / f).exists()]
 
     if remote_sha == local_sha and not missing:
         print("up to date.")
@@ -109,7 +155,6 @@ def check_and_update(silent: bool = False) -> bool:
     short = remote_sha[:7]
     print(f"new version available ({short})\n")
 
-    # Show changelog
     changelog = _get_changelog(local_sha, remote_sha) if local_sha else []
     if changelog:
         print("  What's new:")
@@ -119,7 +164,6 @@ def check_and_update(silent: bool = False) -> bool:
         print("  (changelog unavailable)")
     print()
 
-    # Ask user
     try:
         ans = input("  Update now? [Y/n] ").strip().lower()
     except (EOFError, KeyboardInterrupt):

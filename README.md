@@ -84,14 +84,44 @@ python setup.py
    - Formats USB as FAT32 and creates EFI structure
    - Downloads macOS recovery directly from Apple
    - Generates SMBIOS (serial, MLB, UUID, ROM)
-   - Generates config.plist
+   - Generates config.plist with the correct quirks for your hardware
    - Downloads kexts from GitHub releases
    - Downloads latest OpenCore release
-   - Generates SSDTs using SSDTTime from your actual DSDT
+   - Generates SSDTs from your actual DSDT using SSDTTime
+
+## Supported Hardware
+
+**CPU generations:** Sandy Bridge · Ivy Bridge · Haswell · Broadwell · Skylake · Kaby Lake · Coffee Lake · Comet Lake · Rocket Lake · Alder Lake · Raptor Lake · AMD Ryzen / Threadripper
+
+**Laptops tested:** ThinkPad T480s, T480, T470, X1 Carbon · Dell XPS 13/15 · HP EliteBook · ASUS ZenBook · Acer Aspire
+
+**Platforms:** laptops, desktops, mini-PCs
+
+**macOS versions:** Ventura · Sonoma · Sequoia · Tahoe (macOS 16)
 
 ## After install
-- Run USBToolBox inside macOS to map USB ports
-- Replace the placeholder USBMap.kext with your generated one
+- Run USBToolBox (saved to `EFI/HackMate-Extras/`) inside macOS to map your USB ports
+- Replace the placeholder `USBMap.kext` with your generated one — or use HackMate's USB Mapping screen
+
+## FAQ
+
+**Do I need a Mac to use HackMate?**
+No. HackMate runs on Linux, Windows, and macOS. You can create the USB from any computer.
+
+**Will this work on my laptop/desktop?**
+If your CPU is Intel 2nd–13th gen or AMD Ryzen, it very likely will. Run HackMate and it will tell you which macOS versions are compatible with your exact hardware.
+
+**Is this the same as following the Dortania OpenCore guide manually?**
+HackMate uses the same tools (macrecovery, SSDTTime, OpenCore) recommended by Dortania, but automates every step. The output EFI is equivalent to what you'd build manually — just without hours of work.
+
+**Can I hackintosh a ThinkPad?**
+Yes — HackMate was built and tested on a ThinkPad T480s. Intel WiFi (itlwm + HeliPort), trackpad (VoodooI2C), and all common ThinkPad hardware is supported.
+
+**Does it work on Windows without Python?**
+Yes. Download `HackMate.exe` from the releases page — no Python or dependencies needed.
+
+**My antivirus is flagging HackMate.exe**
+Known false positive with PyInstaller-built executables. Every major AV (Defender, Kaspersky, ESET) reports clean. The EXE is built from source on GitHub Actions — [view build logs](https://github.com/riftaway7-code/hackmate/actions/workflows/build-exe.yml).
 
 ## Support
 
@@ -100,7 +130,7 @@ HackMate is free and open source. If it saved you hours of config.plist hell, co
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/riftaway7-code?style=flat&color=ea4aaa)](https://github.com/sponsors/riftaway7-code)
 
 ## Notes
-- macOS is sourced directly from Apple
-- Uses the same tools recommended by the Dortania guide (macrecovery, SSDTTime)
-- Tested on ThinkPad T480s (i5-8350U, Intel 8265 WiFi)
+- macOS is sourced directly from Apple's servers
+- Uses the same tools recommended by the Dortania guide (macrecovery, SSDTTime, OpenCore)
+- Tested on ThinkPad T480s (i5-8350U, Intel 8265 WiFi, Kaby Lake-R)
 - Auto-updates itself on launch via GitHub

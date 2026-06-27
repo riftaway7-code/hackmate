@@ -979,12 +979,13 @@ class USBScreen(Screen):
 # ─── Build Mode ───────────────────────────────────────────────────────────────
 
 class WiFiKextScreen(Screen):
-    """Ask user: itlwm (HeliPort) vs AirportItlwm (native, macOS-version-specific)."""
+    """WiFi kext selection + optional credential pre-load for itlwm."""
     def __init__(self, device: str, repair: bool, skip_format: bool):
         super().__init__()
         self.device = device
         self.repair = repair
         self.skip_format = skip_format
+        self._itlwm_chosen = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -996,19 +997,41 @@ class WiFiKextScreen(Screen):
                 Static(""),
                 Static("  Standard (itlwm + HeliPort)", classes="info"),
                 Static("    Works with ALL macOS versions including Tahoe.", classes="info"),
-                Static("    Can pre-load WiFi credentials to auto-connect during install.", classes="info"),
+                Static("    Pre-load WiFi credentials to auto-connect during install.", classes="info"),
                 Static(""),
                 Static("  Native AirportBSD (AirportItlwm)", classes="info"),
                 Static("    Shows as built-in WiFi — no HeliPort needed.", classes="info"),
-                Static("    ⚠  Tied to macOS version — no Tahoe build yet. Avoid for Tahoe.", classes="info"),
+                Static("    ⚠  Tied to macOS version — no Tahoe build yet.", classes="info"),
                 Static(""),
-                Button("Standard (itlwm + HeliPort)",  id="itlwm",         classes="primary"),
-                Button("Native (AirportItlwm)",         id="airportitlwm",  classes="primary"),
-                Button("← Back",                        id="back",          classes="back"),
+                Button("Standard (itlwm + HeliPort)", id="itlwm",        classes="primary"),
+                Button("Native (AirportItlwm)",        id="airportitlwm", classes="primary"),
+                Button("← Back",                       id="back",         classes="back"),
+                # Credential fields — hidden until Standard is chosen
+                Static("", id="creds-sep", classes="info"),
+                Static("── WiFi Auto-Connect (optional) ────────────────────────", id="creds-title", classes="title"),
+                Static("  Network name (SSID):", id="creds-ssid-label", classes="info"),
+                Input(placeholder="MyWiFiNetwork", id="ssid"),
+                Static("  Password:", id="creds-pw-label", classes="info"),
+                Input(placeholder="(leave blank for open networks)", password=True, id="password"),
+                Static(""),
+                Button("Save & Continue", id="creds-save", classes="primary"),
+                Button("Skip",            id="creds-skip", classes="primary"),
                 classes="screen-inner"
             )
         )
         yield Footer()
+
+    def on_mount(self) -> None:
+        self._set_creds_visible(False)
+
+    def _set_creds_visible(self, visible: bool) -> None:
+        ids = ["creds-sep", "creds-title", "creds-ssid-label", "ssid",
+               "creds-pw-label", "password", "creds-save", "creds-skip"]
+        for wid in ids:
+            try:
+                self.query_one(f"#{wid}").display = visible
+            except Exception:
+                pass
 
     def _next(self) -> None:
         profile: HardwareProfile = self.app.profile
@@ -1020,65 +1043,31 @@ class WiFiKextScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "itlwm":
             self.app.wifi_kext_mode = "itlwm"
-            self.app.push_screen(WiFiCredsScreen(self.device, repair=self.repair, skip_format=self.skip_format))
+            self._itlwm_chosen = True
+            # Hide mode buttons, show credential fields
+            self.query_one("#itlwm",       Button).display = False
+            self.query_one("#airportitlwm",Button).display = False
+            self._set_creds_visible(True)
         elif event.button.id == "airportitlwm":
             self.app.wifi_kext_mode = "AirportItlwm"
             self._next()
-        elif event.button.id == "back":
-            self.app.pop_screen()
-
-
-class WiFiCredsScreen(Screen):
-    """Optionally pre-load WiFi credentials into itlwm so it auto-connects during install."""
-    def __init__(self, device: str, repair: bool, skip_format: bool):
-        super().__init__()
-        self.device = device
-        self.repair = repair
-        self.skip_format = skip_format
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Container(
-            Vertical(
-                Static("── WiFi Auto-Connect (optional) ─────────────────────────", classes="title"),
-                Static(""),
-                Static("  itlwm can auto-connect during the macOS installer", classes="info"),
-                Static("  if you pre-load your WiFi credentials now.", classes="info"),
-                Static(""),
-                Static("  Leave blank to skip (you can use ethernet instead).", classes="info"),
-                Static(""),
-                Static("  Network name (SSID):", classes="info"),
-                Input(placeholder="MyWiFiNetwork", id="ssid"),
-                Static(""),
-                Static("  Password:", classes="info"),
-                Input(placeholder="password", password=True, id="password"),
-                Static(""),
-                Button("Save & Continue",  id="save",   classes="primary"),
-                Button("Skip",             id="skip",   classes="primary"),
-                Button("← Back",           id="back",   classes="back"),
-                classes="screen-inner"
-            )
-        )
-        yield Footer()
-
-    def _next(self) -> None:
-        profile: HardwareProfile = self.app.profile
-        if getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel":
-            self.app.push_screen(DGPUScreen(self.device, repair=self.repair, skip_format=self.skip_format))
-        else:
-            self.app.push_screen(ConfirmScreen(self.device, repair=self.repair, skip_format=self.skip_format))
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "save":
+        elif event.button.id == "creds-save":
             self.app.wifi_ssid     = self.query_one("#ssid",     Input).value.strip()
             self.app.wifi_password = self.query_one("#password", Input).value
             self._next()
-        elif event.button.id == "skip":
+        elif event.button.id == "creds-skip":
             self.app.wifi_ssid = ""
             self.app.wifi_password = ""
             self._next()
         elif event.button.id == "back":
-            self.app.pop_screen()
+            if self._itlwm_chosen:
+                # Go back to mode selection
+                self._itlwm_chosen = False
+                self.query_one("#itlwm",       Button).display = True
+                self.query_one("#airportitlwm",Button).display = True
+                self._set_creds_visible(False)
+            else:
+                self.app.pop_screen()
 
 
 class BuildModeScreen(Screen):

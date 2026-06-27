@@ -484,6 +484,10 @@ def _nvram_section(profile: HardwareProfile, layout_id: int, macos_major: int = 
     if profile.gpu_vendor == "nvidia":
         boot_args.append("nv_disable=1")  # disable NVIDIA (unsupported on modern macOS)
 
+    if profile.platform == "laptop" and profile.gpu_vendor == "intel":
+        boot_args.append("agdpmod=vit9696")  # iGPU display patch (WhateverGreen)
+        boot_args.append("darkwake=0")        # prevent random sleep wakes
+
     return {
         "Add": {
             "4D1EDE05-38C7-4A6A-9CC6-4BCCA8B38C14": {
@@ -645,6 +649,7 @@ def _booter_section(profile: HardwareProfile) -> dict:
             "DiscardHibernateMap":      False,
             "EnableSafeModeSlide":      True,
             "EnableWriteUnprotector":   False,
+            "FixupAppleEfiImages":      True,
             "ForceBooterSignature":     False,
             "ForceExitBootServices":    False,
             "ProtectMemoryRegions":     False,

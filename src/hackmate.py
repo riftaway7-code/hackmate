@@ -159,49 +159,41 @@ class EnableOCLoggingScreen(Screen):
     @work(thread=True)
     def _do_patch(self) -> None:
         from oc_log import enable_oc_logging
-        from compat import get_mount_path, IS_WINDOWS, IS_MACOS
-        from pathlib import Path
+        from compat import get_mount_path, mount_usb, unmount_usb
 
         drive = self._drives[self._selected]
         device = drive["device"]
+        status = self.query_one("#log-status", Static)
 
-        self.app.call_from_thread(
-            self.query_one("#log-status", Static).update,
-            "  Searching for config.plist on USB…"
-        )
-
-        # Find config.plist — check both mounted path and EFI partition
-        candidates: list[Path] = []
+        self.app.call_from_thread(status.update, "  Mounting USB…")
         mount = get_mount_path(device, skip_format=True)
-        for base in [Path(mount), Path(mount) / "EFI" / "OC"]:
-            p = base / "config.plist"
-            if p.exists():
-                candidates.append(p)
-            # also check EFI/OC one level up
-            p2 = base.parent / "EFI" / "OC" / "config.plist"
-            if p2.exists() and p2 not in candidates:
-                candidates.append(p2)
+        mount_usb(device, mount)
 
-        if not candidates:
+        cfg_path = Path(mount) / "EFI" / "OC" / "config.plist"
+        if not cfg_path.exists():
+            unmount_usb(mount)
             self.app.call_from_thread(
-                self.query_one("#log-status", Static).update,
-                f"  [red]config.plist not found on {device}. Is the EFI partition mounted?[/red]"
+                status.update,
+                f"  [red]config.plist not found at {cfg_path}[/red]\n"
+                "  Make sure this is a HackMate USB with EFI/OC/config.plist on it."
             )
             return
 
-        cfg_path = candidates[0]
+        self.app.call_from_thread(status.update, "  Patching config.plist…")
         ok = enable_oc_logging(cfg_path)
+        unmount_usb(mount)
 
         if ok:
             self.app.call_from_thread(
-                self.query_one("#log-status", Static).update,
-                f"  [green]✓ Logging enabled in {cfg_path}[/green]\n"
-                "  Reboot with this USB. After it boots (or fails), the log will be at:\n"
-                f"  {cfg_path.parent / 'opencore-<date>.txt'}"
+                status.update,
+                "  [green]✓ OC logging enabled.[/green]\n"
+                "  Reboot with this USB. Even if it fails, plug it back in.\n"
+                "  Log will be at: EFI/OC/opencore-<date>.txt on the USB.\n"
+                "  Then use Check Logs → Analyze to read it."
             )
         else:
             self.app.call_from_thread(
-                self.query_one("#log-status", Static).update,
+                status.update,
                 f"  [red]✗ Failed to patch {cfg_path} — check permissions.[/red]"
             )
 

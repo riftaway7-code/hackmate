@@ -24,8 +24,8 @@ class MacOSVersion:
 
 MACOS_VERSIONS = [
     MacOSVersion("macOS Tahoe (26)",      "26", "Mac-CFF7D910A743CAAF", "00000000000000000", os_flag="--os latest", min_gen=7,  notes="Latest — Intel 7th gen+ (Nvidia dGPU must be disabled in BIOS)"),
-    MacOSVersion("macOS Sequoia (15)",    "15", "Mac-7BA5B2D9E42DDD94", "00000000000000000", min_gen=7,  notes="Intel 7th gen+"),
-    MacOSVersion("macOS Sonoma (14)",     "14", "Mac-827FAC58A8FDFA22", "00000000000000000", min_gen=7,  notes="Intel 7th gen+"),
+    MacOSVersion("macOS Sequoia (15)",    "15", "Mac-7BA5B2D9E42DDD94", "00000000000000000", os_flag="--os latest", min_gen=7,  notes="Intel 7th gen+"),
+    MacOSVersion("macOS Sonoma (14)",     "14", "Mac-827FAC58A8FDFA22", "00000000000000000", os_flag="--os latest", min_gen=7,  notes="Intel 7th gen+"),
     MacOSVersion("macOS Ventura (13)",    "13", "Mac-B4831CEBD52A0C4C", "00000000000000000", min_gen=6,  notes="Intel 6th gen+"),
     MacOSVersion("macOS Monterey (12)",   "12", "Mac-E43C1C25D4880AD6", "00000000000000000", min_gen=5,  notes="Intel 5th gen+"),
     MacOSVersion("macOS Big Sur (11)",    "11", "Mac-2BD1B31983FE1663", "00000000000000000", min_gen=4,  notes="Intel 4th gen+"),

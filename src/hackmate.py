@@ -1698,7 +1698,7 @@ class InstallScreen(Screen):
             log("", "info")
             log("══════════════════════════════════════════════════", "header")
             log("  USB is ready!", "ok")
-            if manual:
+            if truly_manual:
                 log("  ! Some SSDTs need manual install (see README_MANUAL_SSDTS.txt)", "warn")
             log("  Configure BIOS settings, then boot from the USB.", "info")
             log("══════════════════════════════════════════════════", "header")

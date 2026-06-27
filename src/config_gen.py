@@ -668,8 +668,8 @@ def _booter_section(profile: HardwareProfile) -> dict:
 
 # ─── Main builder ─────────────────────────────────────────────────────────────
 
-def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0) -> dict:
-    kexts = select_kexts(profile)
+def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0, wifi_kext_mode: str = "itlwm") -> dict:
+    kexts = select_kexts(profile, wifi_kext_mode=wifi_kext_mode)
     layout_id = get_alc_layout(profile.audio_codec)
     ssdts = _required_ssdts(profile, kexts)
 

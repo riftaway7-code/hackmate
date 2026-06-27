@@ -1464,7 +1464,7 @@ class InstallScreen(Screen):
             log("── Generating config.plist...", "header")
             from config_gen import generate as gen_config, write_plist, _required_ssdts
             macos_major = int(version.version) if version and version.version.isdigit() else 0
-            config = gen_config(profile, smbios, macos_major)
+            config = gen_config(profile, smbios, macos_major, wifi_kext_mode=self.app.wifi_kext_mode)
             if self.app.disable_dgpu:
                 from config_editor import set_dgpu_disabled
                 set_dgpu_disabled(config, True)

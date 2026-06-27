@@ -81,6 +81,12 @@ Switch                { margin: 0 1 0 0; }
 #simple-panel         { height: auto; }
 #advanced-panel       { height: auto; }
 .short-input          { width: 16; }
+#checker-scroll       { height: 1fr; border: solid #1a1a1a; }
+#checker-summary      { height: 1; }
+.finding-critical     { color: #ff4444; }
+.finding-warn         { color: #ffaa00; }
+.finding-info         { color: #888888; }
+.finding-context      { color: #2a2a2a; }
 """
 
 BANNER = (
@@ -93,6 +99,105 @@ BANNER = (
 )
 
 
+# ─── Log Checker ──────────────────────────────────────────────────────────────
+
+class LogCheckerScreen(Screen):
+    """Analyze OpenCore logs and kernel panic files to identify issues and suggest fixes."""
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Log Analyzer ─────────────────────────────────────────────", classes="title"),
+                Static("  Paste the path to an OpenCore log, kernel panic (.panic), or any boot log.", classes="info"),
+                Static(""),
+                Horizontal(
+                    Static("  Path: ", classes="cfg-label"),
+                    Input(placeholder="/path/to/opencore-2026-06-25.txt", id="log-path"),
+                    classes="cfg-row",
+                ),
+                Static(""),
+                Horizontal(
+                    Button("Analyze", id="analyze", classes="primary"),
+                    Button("← Back",  id="back",    classes="back"),
+                ),
+                Static("", id="checker-summary"),
+                Static(""),
+                ScrollableContainer(
+                    RichLog(id="checker-log", auto_scroll=False, markup=True),
+                    id="checker-scroll",
+                ),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "analyze":
+            path = self.query_one("#log-path", Input).value.strip()
+            if path:
+                self._run_analysis(path)
+        elif event.button.id == "back":
+            self.app.pop_screen()
+
+    def on_input_submitted(self, event) -> None:
+        path = event.value.strip()
+        if path:
+            self._run_analysis(path)
+
+    @work(thread=True)
+    def _run_analysis(self, path: str) -> None:
+        from log_checker import analyze_file
+        self.app.call_from_thread(self._set_summary, "  Analyzing…", "info")
+        self.app.call_from_thread(self._clear)
+
+        profile = getattr(self.app, "profile", None)
+        findings = analyze_file(path, profile)
+
+        n_crit = sum(1 for f in findings if f.severity == "critical")
+        n_warn = sum(1 for f in findings if f.severity == "warning")
+        n_info = sum(1 for f in findings if f.severity == "info")
+
+        parts = []
+        if n_crit: parts.append(f"[bold red]{n_crit} critical[/bold red]")
+        if n_warn: parts.append(f"[bold yellow]{n_warn} warning{'s' if n_warn != 1 else ''}[/bold yellow]")
+        if n_info: parts.append(f"[dim]{n_info} info[/dim]")
+        summary = "  " + "  •  ".join(parts) if parts else "  No issues found"
+        self.app.call_from_thread(self._set_summary, summary, "ok")
+
+        SEV_COLOR = {"critical": "red", "warning": "yellow", "info": "#888888"}
+        SEV_ICON  = {"critical": "✗", "warning": "⚠", "info": "ℹ"}
+
+        for f in findings:
+            color = SEV_COLOR.get(f.severity, "#888888")
+            icon  = SEV_ICON.get(f.severity, "•")
+            conf  = f" [{f.confidence}]" if f.confidence != "likely" else ""
+            self.app.call_from_thread(
+                self._write,
+                f"[{color}]{icon}  {f.title}{conf}[/{color}]"
+            )
+            self.app.call_from_thread(
+                self._write,
+                f"[#aaaaaa]   {f.explanation}[/#aaaaaa]"
+            )
+            for step in f.fix_steps:
+                self.app.call_from_thread(self._write, f"[#555555]   → {step}[/#555555]")
+            if f.context_lines:
+                self.app.call_from_thread(self._write, "[#2a2a2a]   ┄[/#2a2a2a]")
+                for ctx in f.context_lines:
+                    self.app.call_from_thread(self._write, f"[#2a2a2a]   {ctx}[/#2a2a2a]")
+            self.app.call_from_thread(self._write, "")
+
+    def _clear(self) -> None:
+        self.query_one("#checker-log", RichLog).clear()
+
+    def _write(self, msg: str) -> None:
+        self.query_one("#checker-log", RichLog).write(msg)
+
+    def _set_summary(self, msg: str, level: str = "info") -> None:
+        self.query_one("#checker-summary", Static).update(msg)
+
+
 # ─── Welcome ──────────────────────────────────────────────────────────────────
 
 class WelcomeScreen(Screen):
@@ -103,11 +208,12 @@ class WelcomeScreen(Screen):
                 Static(BANNER,     classes="title",    id="banner"),
                 Static("Automated OpenCore EFI builder — any hardware", classes="info", id="subtitle"),
                 Static(""),
-                Button("Build EFI",              id="start",   classes="primary"),
-                Button("Build EFI (Manual)",     id="manual",  classes="primary"),
-                Button("Restore EFI",            id="restore", classes="primary"),
-                Button("Edit Config",            id="edit_cfg",classes="primary"),
-                Button("Quit",                   id="quit",    classes="danger"),
+                Button("Build EFI",              id="start",      classes="primary"),
+                Button("Build EFI (Manual)",     id="manual",     classes="primary"),
+                Button("Restore EFI",            id="restore",    classes="primary"),
+                Button("Edit Config",            id="edit_cfg",   classes="primary"),
+                Button("Check Logs",             id="check_logs", classes="primary"),
+                Button("Quit",                   id="quit",       classes="danger"),
                 id="welcome-inner"
             ),
             id="welcome"
@@ -123,6 +229,8 @@ class WelcomeScreen(Screen):
             self.app.push_screen(RestoreScreen())
         elif event.button.id == "edit_cfg":
             self.app.push_screen(ConfigEditorUSBScreen())
+        elif event.button.id == "check_logs":
+            self.app.push_screen(LogCheckerScreen())
         elif event.button.id == "quit":
             self.app.exit()
 

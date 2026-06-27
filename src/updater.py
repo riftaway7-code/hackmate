@@ -28,6 +28,7 @@ FILES = [
     "compat.py",
     "oc_log.py",
     "config_editor.py",
+    "log_checker.py",
 ]
 
 

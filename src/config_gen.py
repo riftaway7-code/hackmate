@@ -610,7 +610,7 @@ def _uefi_section(profile: HardwareProfile) -> dict:
             "EnableVectorAcceleration":     profile.platform == "desktop",
             "EnableVmx":                    False,
             "ExitBootServicesDelay":        0,
-            "ForceOcWriteFlash":            False,
+            "ForceOcWriteFlash":            True,
             "ForgeUefiSupport":             False,
             "IgnoreInvalidFlexRatio":       "lenovo" in _dmi_vendor(),
             "ReleaseUsbOwnership":          True,

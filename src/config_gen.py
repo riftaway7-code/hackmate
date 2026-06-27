@@ -648,7 +648,7 @@ def _booter_section(profile: HardwareProfile) -> dict:
             "DisableVariableWrite":     False,
             "DiscardHibernateMap":      False,
             "EnableSafeModeSlide":      True,
-            "EnableWriteUnprotector":   False,
+            "EnableWriteUnprotector":   True,
             "FixupAppleEfiImages":      True,
             "ForceBooterSignature":     False,
             "ForceExitBootServices":    False,
@@ -657,11 +657,11 @@ def _booter_section(profile: HardwareProfile) -> dict:
             "ProtectUefiServices":      True,
             "ProvideCustomSlide":       True,
             "ProvideMaxSlide":          0,
-            "RebuildAppleMemoryMap":    True,
+            "RebuildAppleMemoryMap":    False,
             "ResizeAppleGpuBars":       -1,
             "SetupVirtualMap":          True,
             "SignalAppleOS":            True,
-            "SyncRuntimePermissions":   True,
+            "SyncRuntimePermissions":   False,
         },
     }
 

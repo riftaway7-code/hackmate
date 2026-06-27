@@ -6,6 +6,98 @@ import shlex
 import json
 from pathlib import Path
 
+DEMO_MODE = "--demo" in sys.argv
+
+if DEMO_MODE:
+    import time as _time
+
+    def _c(code, text): return f"\033[{code}m{text}\033[0m"
+    def _green(t):  return _c("32", t)
+    def _cyan(t):   return _c("36", t)
+    def _grey(t):   return _c("90", t)
+    def _yellow(t): return _c("33", t)
+
+    BANNER = """
+\033[36m██╗  ██╗ █████╗  ██████╗██╗  ██╗███╗   ███╗ █████╗ ████████╗███████╗
+██║  ██║██╔══██╗██╔════╝██║ ██╔╝████╗ ████║██╔══██╗╚══██╔══╝██╔════╝
+███████║███████║██║     █████╔╝ ██╔████╔██║███████║   ██║   █████╗
+██╔══██║██╔══██║██║     ██╔═██╗ ██║╚██╔╝██║██╔══██║   ██║   ██╔══╝
+██║  ██║██║  ██║╚██████╗██║  ██╗██║ ╚═╝ ██║██║  ██║   ██║   ███████╗
+╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝\033[0m
+  Automated OpenCore EFI builder — any hardware
+"""
+
+    def _line(msg, ok=False, warn=False, header=False, grey=False):
+        if ok:     print(_green(f"  ✓  {msg}"))
+        elif warn: print(_yellow(f"  ⚠  {msg}"))
+        elif header: print(_cyan(f"\n  {msg}"))
+        elif grey: print(_grey(f"  {msg}"))
+        else:      print(f"  {msg}")
+
+    print(BANNER)
+    _time.sleep(0.6)
+
+    _line("── Scanning Hardware ─────────────────────────────────────", header=True)
+    _time.sleep(0.5)
+    for row in [
+        ("CPU       Intel Core i5-8350U", True),
+        ("Codename  Kaby Lake-R  (Gen 8)", True),
+        ("Platform  laptop  —  Laptop", True),
+        ("GPU       Intel UHD Graphics 620", True),
+        ("Audio     Realtek ALC257  →  layout-id 11", True),
+        ("Ethernet  Intel I219-V", True),
+        ("WiFi      Intel Wireless-AC 8265", True),
+        ("SMBIOS    MacBookPro15,2", True),
+        ("Kexts     22 selected", True),
+        ("NVMe      Yes   Thunderbolt: Yes", True),
+    ]:
+        _line(row[0], ok=row[1])
+        _time.sleep(0.07)
+
+    _time.sleep(0.5)
+    _line("── Downloading Kexts ─────────────────────────────────────", header=True)
+    _time.sleep(0.3)
+    for k in ["Lilu","VirtualSMC","WhateverGreen","AppleALC","IntelMausiEthernet",
+              "itlwm","IntelBluetoothFirmware","VoodooPS2Controller","VoodooI2C",
+              "VoodooI2CELAN","USBToolBox","UTBMap","NVMeFix","CPUFriend"]:
+        _line(f"{k}.kext", ok=True)
+        _time.sleep(0.09)
+    _line("HeliPort saved to EFI/HackMate-Extras/", ok=True)
+    _line("USBToolBox app saved to EFI/HackMate-Extras/", ok=True)
+
+    _time.sleep(0.4)
+    _line("── Generating SSDTs from DSDT ────────────────────────────", header=True)
+    _time.sleep(0.3)
+    for name, method in [("SSDT-PLUG","SSDTTime"),("SSDT-EC-USBX","SSDTTime"),
+                          ("SSDT-PNLF","SSDTTime"),("SSDT-GPI0","SSDTTime"),
+                          ("SSDT-XOSI","bundled")]:
+        _line(f"{name:<16} [{method}]", ok=True)
+        _time.sleep(0.15)
+
+    _time.sleep(0.4)
+    _line("── OpenCore + Config ─────────────────────────────────────", header=True)
+    _time.sleep(0.4)
+    _line("OpenCore 1.0.4 extracted", ok=True)
+    _time.sleep(0.2)
+    _line("SMBIOS generated  (MacBookPro15,2)", ok=True)
+    _time.sleep(0.2)
+    _line("config.plist generated  (42 quirks configured)", ok=True)
+
+    _time.sleep(0.4)
+    _line("── EFI Sanity Check ──────────────────────────────────────", header=True)
+    _time.sleep(0.4)
+    _line("42 checks passed", ok=True)
+
+    _time.sleep(0.3)
+    print()
+    print(_cyan("  ══════════════════════════════════════════════════════"))
+    print(_green("  ✓  USB is ready!  Boot from it to install macOS Tahoe."))
+    print(_grey("     Configure BIOS settings, then select the installer."))
+    print(_cyan("  ══════════════════════════════════════════════════════"))
+    print()
+    _time.sleep(1.5)
+    sys.exit(0)
+
 from compat import require_admin, IS_WINDOWS, get_usb_drives, format_usb, mount_usb, unmount_usb, get_mount_path, get_tmp_dir
 require_admin()
 
@@ -2300,6 +2392,129 @@ class BIOSChecklistScreen(Screen):
             self.app.pop_screen()
 
 
+# ─── Demo Mode ───────────────────────────────────────────────────────────────
+
+class DemoScreen(Screen):
+    """Auto-playing walkthrough for screenshots/GIFs — launched with --demo."""
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Container(classes="screen-inner"):
+            with Vertical():
+                yield Static("── HackMate Demo ────────────────────────────────────────", classes="title")
+                yield Static("", id="stage")
+                yield ProgressBar(id="progress", total=100)
+                yield RichLog(id="log", auto_scroll=True, markup=True)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        self.run_demo()
+
+    def _log(self, msg: str, level: str = "info") -> None:
+        colors = {"ok": "green", "warn": "yellow", "error": "red", "info": "#888888", "header": "cyan"}
+        color  = colors.get(level, "#888888")
+        self.query_one("#log", RichLog).write(f"[{color}]{msg}[/{color}]")
+
+    def _stage(self, pct: int, msg: str) -> None:
+        self.query_one("#stage",    Static).update(f"  {msg}")
+        self.query_one("#progress", ProgressBar).progress = pct
+
+    @work(thread=True)
+    def run_demo(self) -> None:
+        import time
+
+        def ui(pct, msg): self.app.call_from_thread(self._stage, pct, msg)
+        def log(msg, lv="info"): self.app.call_from_thread(self._log, msg, lv)
+
+        time.sleep(0.5)
+
+        # ── Stage 1: Hardware scan ────────────────────────────────────────────
+        ui(5, "Scanning hardware...")
+        time.sleep(0.8)
+        log("── Hardware Detection ─────────────────────────────────", "header")
+        for line in [
+            ("  CPU       Intel Core i5-8350U", "ok"),
+            ("  Codename  Kaby Lake-R  (Gen 8)", "ok"),
+            ("  Platform  laptop  —  Laptop", "ok"),
+            ("  GPU       Intel UHD Graphics 620 [intel]", "ok"),
+            ("  Audio     Realtek ALC257  →  layout-id 11", "ok"),
+            ("  Ethernet  Intel I219-V", "ok"),
+            ("  WiFi      Intel Wireless-AC 8265", "ok"),
+            ("  SMBIOS    MacBookPro15,2", "ok"),
+            ("  Kexts     22 selected", "ok"),
+            ("  NVMe      Yes   Thunderbolt: Yes", "ok"),
+        ]:
+            log(*line)
+            time.sleep(0.07)
+
+        time.sleep(1.0)
+
+        # ── Stage 2: Kexts ───────────────────────────────────────────────────
+        ui(20, "Downloading kexts from GitHub...")
+        log("", "info")
+        log("── Downloading Kexts ──────────────────────────────────", "header")
+        kexts = [
+            "Lilu", "VirtualSMC", "WhateverGreen", "AppleALC",
+            "IntelMausiEthernet", "itlwm", "IntelBluetoothFirmware",
+            "VoodooPS2Controller", "VoodooI2C", "VoodooI2CELAN",
+            "USBToolBox", "UTBMap", "NVMeFix", "CPUFriend",
+        ]
+        for k in kexts:
+            log(f"  {k}.kext  — OK", "ok")
+            time.sleep(0.08)
+        log("  HeliPort saved to EFI/HackMate-Extras/", "ok")
+        log("  USBToolBox app saved to EFI/HackMate-Extras/", "ok")
+
+        time.sleep(0.5)
+
+        # ── Stage 3: SSDTs ───────────────────────────────────────────────────
+        ui(45, "Generating SSDTs from DSDT...")
+        log("", "info")
+        log("── Generating SSDTs ───────────────────────────────────", "header")
+        ssdts = [
+            ("SSDT-PLUG",    "SSDTTime"),
+            ("SSDT-EC-USBX", "SSDTTime"),
+            ("SSDT-PNLF",    "SSDTTime"),
+            ("SSDT-GPI0",    "SSDTTime"),
+            ("SSDT-XOSI",    "bundled"),
+        ]
+        for name, method in ssdts:
+            log(f"  {name:<16} [{method}]  OK", "ok")
+            time.sleep(0.15)
+
+        time.sleep(0.5)
+
+        # ── Stage 4: OpenCore + config ────────────────────────────────────────
+        ui(62, "Downloading OpenCore...")
+        log("", "info")
+        log("── OpenCore + Config ──────────────────────────────────", "header")
+        time.sleep(0.4)
+        log("  OpenCore 1.0.4 extracted", "ok")
+        time.sleep(0.2)
+        log("  SMBIOS generated  (MacBookPro15,2)", "ok")
+        time.sleep(0.2)
+        log("  config.plist generated  (42 quirks configured)", "ok")
+
+        time.sleep(0.5)
+
+        # ── Stage 5: Sanity checks ────────────────────────────────────────────
+        ui(88, "Running EFI sanity checks...")
+        log("", "info")
+        log("── EFI Sanity Check ───────────────────────────────────", "header")
+        time.sleep(0.3)
+        log("  42 checks passed", "ok")
+
+        # ── Done ─────────────────────────────────────────────────────────────
+        ui(100, "USB is ready!")
+        log("", "info")
+        log("══════════════════════════════════════════════════════", "header")
+        log("  USB is ready!  Boot from it to install macOS Tahoe.", "ok")
+        log("  Configure BIOS settings, then select the installer.", "info")
+        log("══════════════════════════════════════════════════════", "header")
+        time.sleep(2)
+        self.app.call_from_thread(self.app.exit)
+
+
 # ─── App ──────────────────────────────────────────────────────────────────────
 
 def _get_version() -> str:
@@ -2323,7 +2538,10 @@ class HackMate(App):
     efi_output_path: str                   = ""
 
     def on_mount(self) -> None:
-        self.push_screen(WelcomeScreen())
+        if DEMO_MODE:
+            self.push_screen(DemoScreen())
+        else:
+            self.push_screen(WelcomeScreen())
 
 
 if __name__ == "__main__":

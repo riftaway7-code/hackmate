@@ -17,6 +17,8 @@ Automates the entire process of creating a bootable OpenCore hackintosh USB. No 
 
 Supports Linux, Windows, and macOS as host operating systems.
 
+![HackMate demo](demo.gif)
+
 ---
 
 ## 📢 Announcements

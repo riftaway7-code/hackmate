@@ -439,7 +439,9 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
         add("CtlnaAHCIPort")
 
     # ── USB ───────────────────────────────────────────────────────────────────
-    # USBToolBox is a post-install tool — run it inside macOS to generate UTBMap.kext
+    # USBToolBox.kext enables port discovery; UTBMap.kext is a placeholder the
+    # user replaces after running USBToolBox inside macOS (HackMate → USB Mapping)
+    add("USBToolBox", "UTBMap")
     if profile.cpu_generation <= 3:
         add("XHCI-unsupported")
 
@@ -508,6 +510,55 @@ def _find_asset(assets: list, pattern: str) -> Optional[dict]:
         if pattern.lower() in name and name.endswith(".zip"):
             return asset
     return None
+
+
+def download_usbtoolbox_app(dest: Path, progress_cb=None) -> bool:
+    """Download USBToolBox app (macOS or Windows) into dest/."""
+    if progress_cb:
+        progress_cb("Downloading USBToolBox app...")
+    import ssl as _ssl
+    ctx = _ssl.create_default_context()
+    headers = {"User-Agent": "HackMate/1.0"}
+
+    # Find latest release that has a macOS or Windows asset
+    releases_raw = None
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/USBToolBox/Tool/releases?per_page=10",
+            headers=headers,
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as r:
+            releases_raw = json.loads(r.read())
+    except Exception:
+        return False
+
+    asset = None
+    for release in (releases_raw or []):
+        for a in release.get("assets", []):
+            name = a["name"].lower()
+            if IS_WINDOWS and "windows" in name and name.endswith(".zip"):
+                asset = a
+                break
+            if not IS_WINDOWS and "macos" in name and name.endswith(".zip"):
+                asset = a
+                break
+        if asset:
+            break
+
+    if not asset:
+        return False
+
+    dest.mkdir(parents=True, exist_ok=True)
+    out = dest / asset["name"]
+    try:
+        req = urllib.request.Request(asset["browser_download_url"], headers=headers)
+        with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
+            out.write_bytes(r.read())
+        if progress_cb:
+            progress_cb(f"USBToolBox saved to {out.name}")
+        return True
+    except Exception:
+        return False
 
 
 def download_heliport(dest: Path, progress_cb=None) -> bool:

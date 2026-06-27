@@ -362,6 +362,93 @@ class LogCheckerScreen(Screen):
         self.query_one("#checker-summary", Static).update(msg)
 
 
+# ─── USB Mapping ─────────────────────────────────────────────────────────────
+
+class USBMappingScreen(Screen):
+    """Post-install: replace placeholder UTBMap.kext with user's generated one."""
+
+    def compose(self) -> ComposeResult:
+        drives = get_usb_drives()
+        self._drives = drives
+        items = [ListItem(Label(f"  {n}   {s}   {l}")) for n, s, l in drives]
+        if not items:
+            items = [ListItem(Label("  No USB drives detected"))]
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── USB Port Mapping (Post-Install) ─────────────────────", classes="title"),
+                Static(""),
+                Static("  1. Boot into macOS, then run USBToolBox from your USB:", classes="info"),
+                Static("     EFI/HackMate-Extras/  →  map your ports  →  Export", classes="info"),
+                Static(""),
+                Static("  2. Select the drive with your OpenCore EFI:", classes="info"),
+                ListView(*items, id="drive-list"),
+                Static(""),
+                Static("  3. Path to your generated UTBMap.kext:", classes="info"),
+                Input(placeholder="e.g. /Users/you/Desktop/UTBMap.kext", id="kext-path"),
+                Button("Browse…",      id="browse",  classes="primary"),
+                Static(""),
+                Button("Apply USB Map", id="apply",   classes="primary"),
+                Button("← Back",        id="back",    classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "browse":
+            try:
+                import tkinter as _tk
+                from tkinter import filedialog as _fd
+                root = _tk.Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                chosen = _fd.askdirectory(parent=root, title="Select UTBMap.kext folder")
+                root.destroy()
+                if chosen:
+                    self.query_one("#kext-path", Input).value = str(chosen)
+            except Exception:
+                pass
+        elif event.button.id == "apply":
+            self._apply()
+        elif event.button.id == "back":
+            self.app.pop_screen()
+
+    @work(thread=True)
+    def _apply(self) -> None:
+        kext_src = Path(self.query_one("#kext-path", Input).value.strip())
+        idx = self.query_one("#drive-list", ListView).index
+        if not kext_src.exists():
+            self.app.call_from_thread(self.notify, "UTBMap.kext path not found", severity="error")
+            return
+        if not kext_src.name.lower().startswith("utbmap"):
+            self.app.call_from_thread(self.notify, "Select the UTBMap.kext folder, not a file inside it", severity="warning")
+            return
+        if idx is None or not self._drives:
+            self.app.call_from_thread(self.notify, "Select a drive first", severity="warning")
+            return
+
+        device = self._drives[idx][0]
+        mount  = get_mount_path(device, skip_format=True)
+
+        try:
+            if not IS_WINDOWS:
+                mount_usb(device, mount)
+            kext_dest = Path(mount) / "EFI" / "OC" / "Kexts" / "UTBMap.kext"
+            if kext_dest.exists():
+                shutil.rmtree(str(kext_dest))
+            shutil.copytree(str(kext_src), str(kext_dest))
+            if not IS_WINDOWS:
+                unmount_usb(mount)
+            self.app.call_from_thread(
+                self.notify,
+                f"UTBMap.kext applied to {device} — reboot to take effect",
+                severity="information",
+            )
+        except Exception as e:
+            self.app.call_from_thread(self.notify, f"Failed: {e}", severity="error")
+
+
 # ─── Welcome ──────────────────────────────────────────────────────────────────
 
 class WelcomeScreen(Screen):
@@ -375,6 +462,7 @@ class WelcomeScreen(Screen):
                 Button("Build EFI",              id="start",      classes="primary"),
                 Button("Build EFI (Manual)",     id="manual",     classes="primary"),
                 Button("Restore EFI",            id="restore",    classes="primary"),
+                Button("USB Mapping",            id="usb_map",    classes="primary"),
                 Button("Edit Config",            id="edit_cfg",   classes="primary"),
                 Button("Check Logs",             id="check_logs", classes="primary"),
                 Button("Quit",                   id="quit",       classes="danger"),
@@ -393,6 +481,8 @@ class WelcomeScreen(Screen):
             self.app.push_screen(RestoreScreen())
         elif event.button.id == "edit_cfg":
             self.app.push_screen(ConfigEditorUSBScreen())
+        elif event.button.id == "usb_map":
+            self.app.push_screen(USBMappingScreen())
         elif event.button.id == "check_logs":
             self.app.push_screen(LogCheckerScreen())
         elif event.button.id == "quit":
@@ -1569,18 +1659,26 @@ class InstallScreen(Screen):
                 if result.startswith("ERROR"):
                     log(f"  WARN: {name} — {result}", "warn")
 
-            # HeliPort — download alongside itlwm so user has it ready on the USB
+            # Extras — HeliPort (itlwm users) and USBToolBox app (everyone)
+            from kexts import download_heliport, download_usbtoolbox_app
+            extras_dir = Path(mount) / "EFI" / "HackMate-Extras"
             if self.app.wifi_kext_mode == "itlwm":
-                from kexts import download_heliport
-                extras_dir = Path(mount) / "EFI" / "HackMate-Extras"
                 ok = download_heliport(
                     extras_dir,
                     progress_cb=lambda m: log(f"  {m}", "info")
                 )
                 if ok:
-                    log("  HeliPort saved to EFI/HackMate-Extras/ on USB", "ok")
+                    log("  HeliPort saved to EFI/HackMate-Extras/", "ok")
                 else:
                     log("  HeliPort download failed — get it from github.com/OpenIntelWireless/HeliPort", "warn")
+            ok = download_usbtoolbox_app(
+                extras_dir,
+                progress_cb=lambda m: log(f"  {m}", "info")
+            )
+            if ok:
+                log("  USBToolBox app saved to EFI/HackMate-Extras/", "ok")
+            else:
+                log("  USBToolBox download failed — get it from github.com/USBToolBox/Tool", "warn")
 
             # ── 7. Download OpenCore ──────────────────────────────────────────
             MIN_EFI = 50 * 1024  # sane minimum — corrupt/truncated files are smaller

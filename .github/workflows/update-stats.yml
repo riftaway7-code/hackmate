@@ -2,7 +2,7 @@ name: Update Download Stats
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # daily at midnight
+    - cron: "0 * * * *"   # every hour
   workflow_dispatch:
 
 permissions:

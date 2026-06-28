@@ -187,14 +187,14 @@ def _sort_kexts(kexts: list[KextEntry]) -> list[KextEntry]:
     return sorted(kexts, key=lambda k: order.get(k.name, 999))
 
 
-def _kext_entry(kext: KextEntry) -> dict:
+def _kext_entry(kext: KextEntry, enabled: bool = True) -> dict:
     has_exe = kext.name not in NO_EXECUTABLE
     min_k, max_k = KERNEL_VERSIONS.get(kext.name, ("", ""))
     return {
         "Arch":           "x86_64",
         "BundlePath":     f"{kext.name}.kext",
         "Comment":        kext.note,
-        "Enabled":        True,
+        "Enabled":        enabled,
         "ExecutablePath": f"Contents/MacOS/{kext.exe_name or kext.name}" if has_exe else "",
         "MaxKernel":      max_k,
         "MinKernel":      min_k,
@@ -381,7 +381,7 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
         emulate["DummyPowerManagement"] = True
 
     return {
-        "Add":     [_kext_entry(k) for k in sorted_kexts],
+        "Add":     [_kext_entry(k, enabled=(k.name != "UTBMap")) for k in sorted_kexts],
         "Block":   [],
         "Emulate": emulate,
         "Force":   [],

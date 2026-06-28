@@ -131,8 +131,8 @@ DB: dict[str, KextEntry] = {
     "ACPIBatteryManager":KextEntry("ACPIBatteryManager","RehabMan/OS-X-ACPI-Battery-Driver","ACPIBatteryManager-","battery (legacy, use ECEnabler instead on modern OC)"),
 
     # ── USB ───────────────────────────────────────────────────────────────────
-    "USBToolBox":        KextEntry("USBToolBox",       "USBToolBox/USBToolBox",       "USBToolBox.kext",    "USB port mapping tool"),
-    "UTBMap":            KextEntry("UTBMap",           "USBToolBox/UTBMap",           "UTBMap-",            "USB port map (user-generated, companion to USBToolBox)"),
+    "USBToolBox":        KextEntry("USBToolBox",       "USBToolBox/kext",             "USBToolBox-",        "USB port mapping tool"),
+    "UTBMap":            KextEntry("UTBMap",           "",                            "",                   "USB port map (user-generated via USB Mapping after first boot)"),
     "USBInjectAll":      KextEntry("USBInjectAll",     "Sniki/OS-X-USB-Inject-All",   "USBInjectAll-",      "inject all USB ports (use only during mapping, not final EFI)"),
     "GenericUSBXHCI":    KextEntry("GenericUSBXHCI",   "RattletraPM/GenericUSBXHCI",  "GenericUSBXHCI-",    "AMD USB 3.x controller support"),
     "XHCI-unsupported":  KextEntry("XHCI-unsupported", "RehabMan/OS-X-USB-Inject-All","XHCI-unsupported-",  "unsupported USB 3.0 controllers (Sandy/Ivy Bridge)"),
@@ -605,6 +605,10 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify:
 
     for i, kext in enumerate(kexts):
         kext_dest = dest / f"{kext.name}.kext"
+
+        if not kext.repo:
+            results[kext.name] = "SKIP (user-generated)"
+            continue
 
         if verify and _kext_valid(kext_dest):
             if progress_cb:

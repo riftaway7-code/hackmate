@@ -318,9 +318,12 @@ def check(efi_root: Path, profile) -> list[tuple[str, str]]:
     for entry in kernel_add:
         bundle    = entry.get("BundlePath", "").split("/")[0]
         exec_path = entry.get("ExecutablePath", "")
+        enabled   = entry.get("Enabled", True)
         if not bundle:
             continue
         kext_set.add(bundle)
+        if not enabled:
+            continue
         kext_path = kext_dir / bundle
         if not kext_path.exists():
             err(

@@ -530,6 +530,25 @@ class USBMappingScreen(Screen):
             if kext_dest.exists():
                 shutil.rmtree(str(kext_dest))
             shutil.copytree(str(kext_src), str(kext_dest))
+
+            # Enable UTBMap and disable USBToolBox in config.plist
+            config_path = Path(mount) / "EFI" / "OC" / "config.plist"
+            if config_path.exists():
+                try:
+                    import plistlib
+                    with open(config_path, "rb") as f:
+                        cfg = plistlib.load(f)
+                    for entry in cfg.get("Kernel", {}).get("Add", []):
+                        name = entry.get("BundlePath", "").split("/")[0]
+                        if name == "UTBMap.kext":
+                            entry["Enabled"] = True
+                        elif name == "USBToolBox.kext":
+                            entry["Enabled"] = False
+                    with open(config_path, "wb") as f:
+                        plistlib.dump(cfg, f)
+                except Exception:
+                    pass
+
             if not IS_WINDOWS:
                 unmount_usb(mount)
             self.app.call_from_thread(
@@ -2554,6 +2573,42 @@ class HackMate(App):
             self.push_screen(DemoScreen())
         else:
             self.push_screen(WelcomeScreen())
+        self.set_interval(3600, self._check_for_update)
+
+    @work(thread=True)
+    def _check_for_update(self) -> None:
+        from updater import check_update_silent, _download_file, FILES, VERSION_FILE
+        has_update, remote_sha, changelog = check_update_silent()
+        if not has_update:
+            return
+
+        short = remote_sha[:7]
+        summary = changelog[0] if changelog else "improvements and fixes"
+        self.call_from_thread(
+            self.notify,
+            f"Downloading update {short}...",
+            title="HackMate Update",
+            severity="information",
+            timeout=5,
+        )
+
+        failed = [f for f in FILES if not _download_file(f, remote_sha)]
+        if not failed:
+            VERSION_FILE.write_text(remote_sha)
+            self.call_from_thread(
+                self.notify,
+                f"{short}: {summary} — restart to apply",
+                title="Update ready",
+                severity="information",
+                timeout=30,
+            )
+        else:
+            self.call_from_thread(
+                self.notify,
+                f"Update {short} failed ({len(failed)} file(s)) — will retry next hour",
+                severity="warning",
+                timeout=10,
+            )
 
 
 if __name__ == "__main__":

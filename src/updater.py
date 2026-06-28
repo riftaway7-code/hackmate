@@ -112,6 +112,18 @@ def _get_latest_exe_url() -> str | None:
     return None
 
 
+def check_update_silent() -> tuple[bool, str, list[str]]:
+    """Check for updates without any prompts. Returns (has_update, remote_sha, changelog)."""
+    remote_sha = _get_remote_sha()
+    if not remote_sha:
+        return False, "", []
+    local_sha = _get_local_sha()
+    if remote_sha == local_sha:
+        return False, remote_sha, []
+    changelog = _get_changelog(local_sha, remote_sha) if local_sha else []
+    return True, remote_sha, changelog
+
+
 def check_and_update(silent: bool = False) -> bool:
     _ping_launch()
     print("Checking for updates...", end=" ", flush=True)

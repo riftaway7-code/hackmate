@@ -212,6 +212,24 @@ def _detect_cpu_linux(profile: HardwareProfile):
                         break
 
         if not profile.cpu_generation:
+            m = re.search(r"i[3579]-(\d{4,5})", profile.cpu_name, re.IGNORECASE)
+            if m:
+                num = m.group(1)
+                if len(num) == 5:
+                    d = int(num[:2])
+                else:
+                    first = int(num[0])
+                    d = 10 if first == 1 else first
+                gen_map = {2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12}
+                profile.cpu_generation = gen_map.get(d, 0)
+                codename_map = {
+                    2:"Sandy Bridge", 3:"Ivy Bridge", 4:"Haswell", 5:"Broadwell",
+                    6:"Skylake", 7:"Kaby Lake", 8:"Coffee Lake", 9:"Coffee Lake Refresh",
+                    10:"Ice Lake / Comet Lake", 11:"Tiger Lake", 12:"Alder Lake",
+                }
+                profile.cpu_codename = codename_map.get(profile.cpu_generation, "Unknown")
+
+        if not profile.cpu_generation:
             _infer_intel_gen_from_name(profile)
     elif "amd" in profile.cpu_vendor or "amd" in profile.cpu_name.lower():
         profile.cpu_vendor = "amd"
@@ -289,6 +307,10 @@ def _infer_intel_gen_from_name(profile: HardwareProfile):
         profile.cpu_generation = 10
         profile.cpu_codename = "Comet Lake"
         profile.oc_platform = "Comet Lake"
+    elif "9th" in name or "-9" in name or "coffee lake refresh" in name or "coffee lake-r" in name:
+        profile.cpu_generation = 9
+        profile.cpu_codename = "Coffee Lake Refresh"
+        profile.oc_platform = "Coffee Lake"
     elif "8th" in name or "coffee" in name or "kaby lake-r" in name or "-8" in name:
         profile.cpu_generation = 8
         profile.cpu_codename = "Coffee Lake / Kaby Lake-R"

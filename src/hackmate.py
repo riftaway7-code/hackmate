@@ -101,9 +101,9 @@ if DEMO_MODE:
 from compat import require_admin, IS_WINDOWS, get_usb_drives, format_usb, mount_usb, unmount_usb, get_mount_path, get_tmp_dir
 require_admin()
 
-from updater import check_and_update
-if check_and_update():
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+# from updater import check_and_update
+# if check_and_update():
+#     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 try:
     from textual.app import App, ComposeResult
@@ -1041,7 +1041,12 @@ class ScanScreen(Screen):
             self.query_one("#scan-status", Static).update,
             "  Detecting CPU, GPU, audio, network..."
         )
-        profile = scan()
+        try:
+            profile = scan()
+        except Exception:
+            profile = HardwareProfile()
+            profile.cpu_name = "Unknown (scan error)"
+            profile.cpu_generation = 0
         self.app.call_from_thread(self._show_results, profile)
 
     def _show_results(self, profile: HardwareProfile) -> None:
@@ -1093,6 +1098,10 @@ class VersionScreen(Screen):
             note = f"  ({v.notes})" if v.notes else ""
             items.append(ListItem(Label(f"  {v.name}{note}")))
 
+        if not versions:
+            items.append(ListItem(Label("  No versions compatible — hardware detection incomplete")))
+            items.append(ListItem(Label("  Try manual hardware setup below")))
+
         yield Header()
         yield Container(
             Vertical(
@@ -1102,6 +1111,7 @@ class VersionScreen(Screen):
                 ListView(*items, id="version-list"),
                 Static(""),
                 Button("Continue → Select USB", id="next",  classes="primary"),
+                Button("Manual Hardware Setup",  id="manual", classes="primary"),
                 Button("← Back",               id="back",  classes="back"),
                 classes="screen-inner"
             )
@@ -1115,6 +1125,8 @@ class VersionScreen(Screen):
             if idx is not None and self.versions:
                 self.app.macos_version = self.versions[idx]
                 self.app.push_screen(USBScreen())
+        elif event.button.id == "manual":
+            self.app.push_screen(ManualHardwareScreen())
         elif event.button.id == "back":
             self.app.pop_screen()
 

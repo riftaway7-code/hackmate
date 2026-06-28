@@ -39,6 +39,9 @@ class HardwareProfile:
     smbios_model: str = ""    # e.g. MacBookPro15,2
     oc_platform: str = ""     # e.g. Kaby Lake-R
 
+    resizable_bar: bool = False
+    cpu_brand: str = ""
+
     raw_pci: list = field(default_factory=list)
 
 def _run(cmd: list[str]) -> str:
@@ -105,6 +108,10 @@ INTEL_GENERATIONS = {
     "46a6": (12, "Alder Lake", "Alder Lake"),
     "4626": (12, "Alder Lake", "Alder Lake"),
     "a7a0": (13, "Raptor Lake", "Raptor Lake"),
+    "a7a1": (14, "Raptor Lake Refresh", "Raptor Lake"),
+    "a7a8": (14, "Raptor Lake Refresh", "Raptor Lake"),
+    "7d55": (15, "Arrow Lake", "Arrow Lake"),
+    "7d51": (15, "Arrow Lake", "Arrow Lake"),
 }
 
 SMBIOS_MAP = {
@@ -121,6 +128,8 @@ SMBIOS_MAP = {
     (11, "laptop"): "MacBookPro16,1",
     (12, "laptop"): "MacBookPro16,1",
     (13, "laptop"): "MacBookPro16,1",
+    (14, "laptop"):  "MacBookPro16,1",
+    (15, "laptop"):  "MacBookPro16,1",
     (6, "desktop"):  "iMac17,1",
     (7, "desktop"):  "iMac18,3",
     (8, "desktop"):  "iMac19,1",
@@ -129,6 +138,8 @@ SMBIOS_MAP = {
     (11, "desktop"): "MacPro7,1",
     (12, "desktop"): "MacPro7,1",
     (13, "desktop"): "MacPro7,1",
+    (14, "desktop"): "MacPro7,1",
+    (15, "desktop"): "MacPro7,1",
 }
 
 ETHERNET_MAP = {
@@ -168,7 +179,7 @@ AUDIO_CODEC_IDS = {
 }
 
 _OC_PLATFORM_MAP = {
-    14: "Raptor Lake", 13: "Raptor Lake", 12: "Alder Lake",
+    15: "Arrow Lake",  14: "Raptor Lake", 13: "Raptor Lake", 12: "Alder Lake",
     11: "Tiger Lake",  10: "Ice Lake",    9:  "Coffee Lake",
     8:  "Coffee Lake", 7:  "Kaby Lake",   6:  "Skylake",
     5:  "Broadwell",   4:  "Haswell",     3:  "Ivy Bridge",
@@ -277,7 +288,19 @@ def _detect_cpu_windows(profile: HardwareProfile):
 
 def _infer_intel_gen_from_name(profile: HardwareProfile):
     name = profile.cpu_name.lower()
-    if "12th" in name or "alder" in name or "-12" in name:
+    if "15th" in name or "arrow" in name or "core ultra 200" in name:
+        profile.cpu_generation = 15
+        profile.cpu_codename = "Arrow Lake"
+        profile.oc_platform = "Arrow Lake"
+    elif "14th" in name or "raptor lake refresh" in name:
+        profile.cpu_generation = 14
+        profile.cpu_codename = "Raptor Lake Refresh"
+        profile.oc_platform = "Raptor Lake"
+    elif "13th" in name or "raptor" in name:
+        profile.cpu_generation = 13
+        profile.cpu_codename = "Raptor Lake"
+        profile.oc_platform = "Raptor Lake"
+    elif "12th" in name or "alder" in name or "-12" in name:
         profile.cpu_generation = 12
         profile.cpu_codename = "Alder Lake"
         profile.oc_platform = "Alder Lake"
@@ -313,6 +336,25 @@ def _infer_intel_gen_from_name(profile: HardwareProfile):
         profile.cpu_generation = 4
         profile.cpu_codename = "Haswell"
         profile.oc_platform = "Haswell"
+
+def _set_cpu_brand(profile: HardwareProfile):
+    name = profile.cpu_name.lower()
+    if "xeon" in name:
+        profile.cpu_brand = "Xeon"
+    elif "pentium" in name:
+        profile.cpu_brand = "Pentium"
+    elif "celeron" in name:
+        profile.cpu_brand = "Celeron"
+    elif "atom" in name:
+        profile.cpu_brand = "Atom"
+    elif "core ultra" in name:
+        profile.cpu_brand = "Core Ultra"
+    elif "ryzen" in name:
+        profile.cpu_brand = "Ryzen"
+    elif "threadripper" in name:
+        profile.cpu_brand = "Threadripper"
+    else:
+        profile.cpu_brand = "Core"
 
 def _detect_amd_gen(profile: HardwareProfile):
     name = profile.cpu_name.lower()
@@ -712,6 +754,7 @@ def scan() -> HardwareProfile:
         _detect_network_linux(profile)
 
     detect_smbios(profile)
+    _set_cpu_brand(profile)
     return profile
 
 if __name__ == "__main__":

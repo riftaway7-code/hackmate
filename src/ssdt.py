@@ -221,6 +221,49 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "PMCR", 0x00000000)
 }}
 """
 
+GPRW_DSL_TEMPLATE = """\
+DefinitionBlock ("", "SSDT", 2, "HACK", "GPRW", 0x00000000)
+{
+    External (GPRW, MethodObj)
+
+    Method (XPRW, 2, NotSerialized)
+    {
+        If ((0x6D == Arg0))
+        {
+            Return (Package (0x02)
+            {
+                0x6D,
+                Zero
+            })
+        }
+        If ((0x0D == Arg0))
+        {
+            Return (Package (0x02)
+            {
+                0x0D,
+                Zero
+            })
+        }
+        Return (GPRW (Arg0, Arg1))
+    }
+}
+"""
+
+IMEI_DSL_TEMPLATE = """\
+DefinitionBlock ("", "SSDT", 2, "HACK", "IMEI", 0x00000000)
+{
+    External (_SB_.PCI0, DeviceObj)
+
+    Scope (\\_SB.PCI0)
+    {
+        Device (IMEI)
+        {
+            Name (_ADR, 0x00160000)
+        }
+    }
+}
+"""
+
 def _inspect_dsdt(dsdt_path: Path) -> dict:
     """
     Scan the raw DSDT binary for key device names.
@@ -313,6 +356,8 @@ def _build_from_template(ssdt: str, acpi_dir: Path, ssdttime_dir: Path,
         "SSDT-USBX":    USBX_DSL_TEMPLATE.format(),
         "SSDT-PMC":     PMC_DSL_TEMPLATE.format(),
         "SSDT-XOSI":    XOSI_DSL_TEMPLATE,
+        "SSDT-GPRW":    GPRW_DSL_TEMPLATE,
+        "SSDT-IMEI":    IMEI_DSL_TEMPLATE,
     }
 
     dsl = templates.get(ssdt)

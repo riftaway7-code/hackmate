@@ -46,6 +46,11 @@ IG_PLATFORM_IDS: dict[str, bytes] = {
     "iris_tgl":  bytes([0x00, 0x00, 0x49, 0x9A]),
     # Alder Lake (no iGPU support in macOS natively, needs NootedBlue or patch)
     "uhd770":    bytes([0x00, 0x00, 0xA6, 0x46]),
+    # Headless variants (when dGPU drives display)
+    "uhd620_headless":    bytes([0x03, 0x00, 0x9B, 0x3E]),
+    "uhd630_headless":    bytes([0x00, 0x00, 0x9B, 0x3E]),
+    "uhd630_dt_headless": bytes([0x02, 0x00, 0x9B, 0x3E]),
+    "iris_tgl_headless":  bytes([0x02, 0x00, 0x49, 0x9A]),
 }
 
 DEVICE_IDS: dict[str, bytes] = {
@@ -54,7 +59,7 @@ DEVICE_IDS: dict[str, bytes] = {
     "cfl_h":     bytes([0x9B, 0x3E, 0x00, 0x00]),   # spoof as 3E9B
 }
 
-def _igpu_config(profile: HardwareProfile) -> tuple[bytes, bytes | None]:
+def _igpu_config(profile: HardwareProfile, headless: bool = False) -> tuple[bytes, bytes | None]:
     """Returns (ig-platform-id, device-id or None)"""
     gen = profile.cpu_generation
     name = profile.gpu_name.lower()
@@ -83,6 +88,12 @@ def _igpu_config(profile: HardwareProfile) -> tuple[bytes, bytes | None]:
         if "615" in name:      return IG_PLATFORM_IDS["hd615"], None
         return IG_PLATFORM_IDS["hd620"], None
     elif gen == 8:
+        if headless:
+            if profile.platform == "desktop":
+                return IG_PLATFORM_IDS["uhd630_dt_headless"], None
+            if "uhd 630" in name:
+                return IG_PLATFORM_IDS["uhd630_headless"], None
+            return IG_PLATFORM_IDS["uhd620_headless"], None
         if profile.platform == "desktop":
             return IG_PLATFORM_IDS["uhd630_dt"], None
         # Kaby Lake-R / Whiskey Lake / Coffee Lake laptop - UHD 620
@@ -98,6 +109,8 @@ def _igpu_config(profile: HardwareProfile) -> tuple[bytes, bytes | None]:
             return IG_PLATFORM_IDS["uhd630_cml"], None
         return IG_PLATFORM_IDS["uhd620_cml"], None
     elif gen == 11:
+        if headless:
+            return IG_PLATFORM_IDS["iris_tgl_headless"], None
         return IG_PLATFORM_IDS["iris_tgl"], None
     elif gen >= 12:
         return IG_PLATFORM_IDS["uhd770"], None
@@ -201,6 +214,11 @@ def _required_ssdts(profile: HardwareProfile, kexts: list[KextEntry]) -> list[st
     # CPU power management — always
     ssdts.append("SSDT-PLUG")
 
+    ssdts.append("SSDT-GPRW")
+
+    if gen in (2, 3):
+        ssdts.append("SSDT-IMEI")
+
     # Embedded controller
     if profile.platform == "laptop":
         ssdts.append("SSDT-EC-USBX")
@@ -279,7 +297,8 @@ def _device_properties(profile: HardwareProfile, layout_id: int) -> dict:
 
     # Intel iGPU
     if profile.gpu_vendor == "intel" and "arc" not in profile.gpu_name.lower():
-        platform_id, device_id = _igpu_config(profile)
+        headless = bool(profile.dgpu_vendor)
+        platform_id, device_id = _igpu_config(profile, headless=headless)
         igpu_props: dict = {
             "AAPL,ig-platform-id": platform_id,
         }
@@ -289,6 +308,9 @@ def _device_properties(profile: HardwareProfile, layout_id: int) -> dict:
 
         if device_id:
             igpu_props["device-id"] = device_id
+
+        if headless:
+            igpu_props["disable-external-gpu"] = bytes([0x01, 0x00, 0x00, 0x00])
 
         if profile.platform == "laptop":
             # Framebuffer patch for laptop: set stolenmem + cursormem
@@ -309,9 +331,42 @@ def _device_properties(profile: HardwareProfile, layout_id: int) -> dict:
         props["PciRoot(0x0)/Pci(0x1C,0x4)/Pci(0x0,0x0)"] = {
             "device-id":     bytes([0xF2, 0x15, 0x00, 0x00]),
             "PCI-Subchannel": bytes([0x00]),
+            "built-in":      bytes([0x01]),
         }
 
+    if profile.ethernet_chipset and profile.ethernet_chipset not in ("none",):
+        if profile.ethernet_chipset in ("i219", "i218", "i217"):
+            eth_path = "PciRoot(0x0)/Pci(0x1F,0x6)"
+        elif profile.ethernet_chipset in ("rtl8111", "rtl8168", "rtl8125"):
+            eth_path = "PciRoot(0x0)/Pci(0x1C,0x0)/Pci(0x0,0x0)"
+        else:
+            eth_path = None
+        if eth_path:
+            if eth_path not in props:
+                props[eth_path] = {}
+            props[eth_path]["built-in"] = bytes([0x01])
+
+    if profile.nvme_present:
+        nvme_path = "PciRoot(0x0)/Pci(0x1D,0x0)"
+        if nvme_path not in props:
+            props[nvme_path] = {}
+        props[nvme_path]["built-in"] = bytes([0x01])
+
     return {"Add": props, "Delete": {}}
+
+def _cpu_needs_spoof(profile: HardwareProfile) -> tuple[bytes, bytes] | None:
+    name = profile.cpu_name.lower()
+    if "pentium" in name or "celeron" in name:
+        return (
+            bytes.fromhex("EA060900" + "00000000" * 3),
+            bytes.fromhex("FFFFFFFF" + "00000000" * 3),
+        )
+    if "xeon" in name:
+        return (
+            bytes.fromhex("EB060900" + "00000000" * 3),
+            bytes.fromhex("FFFFFFFF" + "00000000" * 3),
+        )
+    return None
 
 def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
     sorted_kexts = _sort_kexts(kexts)
@@ -349,7 +404,6 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
     if profile.cpu_vendor == "amd":
         patches = _amd_kernel_patches(profile)
 
-    # Emulate for Ivy Bridge or older (CPUID spoof)
     emulate: dict = {
         "Cpuid1Data":  b"",
         "Cpuid1Mask":  b"",
@@ -359,6 +413,10 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
     }
     if profile.cpu_generation <= 3:
         emulate["DummyPowerManagement"] = True
+    spoof = _cpu_needs_spoof(profile)
+    if spoof:
+        emulate["Cpuid1Data"] = spoof[0]
+        emulate["Cpuid1Mask"] = spoof[1]
 
     return {
         "Add":     [_kext_entry(k, enabled=(k.name != "UTBMap")) for k in sorted_kexts],
@@ -455,6 +513,9 @@ def _nvram_section(profile: HardwareProfile, layout_id: int, macos_major: int = 
 
     if profile.gpu_vendor == "nvidia":
         boot_args.append("nv_disable=1")  # disable NVIDIA (unsupported on modern macOS)
+
+    if profile.dgpu_vendor == "amd":
+        boot_args.append("-radvesa")
 
     if profile.platform == "laptop" and profile.gpu_vendor == "intel":
         boot_args.append("agdpmod=vit9696")  # iGPU display patch (WhateverGreen)
@@ -597,7 +658,7 @@ def _uefi_section(profile: HardwareProfile) -> dict:
         "ReservedMemory": [],
     }
 
-def _booter_section(profile: HardwareProfile) -> dict:
+def _booter_section(profile: HardwareProfile, resizable_bar: bool = False) -> dict:
     is_z390_or_hedt = profile.cpu_generation >= 9
 
     return {
@@ -621,7 +682,7 @@ def _booter_section(profile: HardwareProfile) -> dict:
             "ProvideCustomSlide":       True,
             "ProvideMaxSlide":          0,
             "RebuildAppleMemoryMap":    False,
-            "ResizeAppleGpuBars":       -1,
+            "ResizeAppleGpuBars":       0 if resizable_bar else -1,
             "SetupVirtualMap":          True,
             "SignalAppleOS":            True,
             "SyncRuntimePermissions":   False,
@@ -647,7 +708,7 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
                 "SyncTableIds":         False,
             },
         },
-        "Booter":           _booter_section(profile),
+        "Booter":           _booter_section(profile, resizable_bar=profile.resizable_bar),
         "DeviceProperties": _device_properties(profile, layout_id),
         "Kernel":           _kernel_section(profile, kexts),
         "Misc": {

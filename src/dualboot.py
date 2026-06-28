@@ -64,10 +64,17 @@ def _scan_linux() -> list[DiskInfo]:
     for dev in data.get("blockdevices", []):
         if dev.get("type") != "disk":
             continue
+        name = dev.get("name", "")
+        # skip virtual/ram devices
+        if name.startswith(("zram", "ram", "loop")):
+            continue
+        size_bytes = int(dev.get("size") or 0)
+        if size_bytes == 0:
+            continue
         disk = DiskInfo(
-            device=f"/dev/{dev['name']}",
+            device=f"/dev/{name}",
             model=(dev.get("model") or "Unknown").strip(),
-            size=_bytes_to_human(int(dev.get("size") or 0)),
+            size=_bytes_to_human(size_bytes),
             transport=(dev.get("tran") or "?").upper(),
             is_gpt=(dev.get("pttype") or "").lower() == "gpt",
         )
@@ -205,6 +212,7 @@ def _scan_efi_dir(root: Path, info: BootloaderInfo):
     known = {
         "BOOT", "Microsoft", "ubuntu", "fedora", "debian", "arch", "manjaro",
         "gentoo", "opensuse", "centos", "rhel", "OC", "refind", "systemd", "Linux",
+        "HackMate-Extras", "HackMate", "tools", "Tools",
     }
     for sub in efi.iterdir():
         if not sub.is_dir():

@@ -6,7 +6,15 @@ from dataclasses import dataclass
 
 
 MACRECOVERY_URL = "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Utilities/macrecovery/macrecovery.py"
-MACRECOVERY_PATH = Path(__file__).parent / "macrecovery.py"
+
+def _macrecovery_path() -> Path:
+    # In a PyInstaller frozen EXE, __file__ is inside _MEIPASS (read-only).
+    # macrecovery.py is bundled there; return that path directly.
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "macrecovery.py"
+    return Path(__file__).parent / "macrecovery.py"
+
+MACRECOVERY_PATH = _macrecovery_path()
 
 
 @dataclass
@@ -58,6 +66,9 @@ def compatible_versions(cpu_gen: int, gpu_vendor: str, cpu_vendor: str = "intel"
 
 
 def ensure_macrecovery() -> Path:
+    if getattr(sys, "frozen", False):
+        # Bundled EXE: macrecovery.py is in _MEIPASS, already exists
+        return MACRECOVERY_PATH
     if not MACRECOVERY_PATH.exists():
         import ssl
         ctx = ssl.create_default_context()
@@ -115,35 +126,58 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
 
     dest.mkdir(parents=True, exist_ok=True)
 
-    cmd = [
-        sys.executable, str(script),
+    script_args = [
         "-b", version.board_id,
         "-m", version.mlb,
     ]
     if version.os_flag:
-        cmd += version.os_flag.split()
-    cmd += ["download", "--outdir", str(dest)]
+        script_args += version.os_flag.split()
+    script_args += ["download", "--outdir", str(dest)]
 
     if progress_cb:
         progress_cb("Connecting to Apple servers...")
 
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        last_msg = ""
-        for line in proc.stdout:
-            line = line.strip()
-            if line and line != last_msg:
-                last_msg = line
-                if progress_cb:
-                    progress_cb(line)
-        proc.wait()
-        if proc.returncode != 0:
-            return False, f"macrecovery exited with code {proc.returncode}"
+        if getattr(sys, "frozen", False):
+            # In a PyInstaller EXE, sys.executable is HackMate.exe — can't use it to run scripts.
+            # Run macrecovery.py in-process via runpy, capturing stdout for progress.
+            import runpy, io
+            old_argv, old_stdout = sys.argv[:], sys.stdout
+            sys.argv = [str(script)] + script_args
+            buf = io.StringIO()
+            sys.stdout = buf
+            exit_code = 0
+            try:
+                runpy.run_path(str(script), run_name="__main__")
+            except SystemExit as e:
+                exit_code = e.code if isinstance(e.code, int) else 0
+            finally:
+                sys.stdout = old_stdout
+                sys.argv = old_argv
+            if progress_cb:
+                for line in buf.getvalue().splitlines():
+                    if line.strip():
+                        progress_cb(line.strip())
+            if exit_code != 0:
+                return False, f"macrecovery exited with code {exit_code}"
+        else:
+            cmd = [sys.executable, str(script)] + script_args
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            last_msg = ""
+            for line in proc.stdout:
+                line = line.strip()
+                if line and line != last_msg:
+                    last_msg = line
+                    if progress_cb:
+                        progress_cb(line)
+            proc.wait()
+            if proc.returncode != 0:
+                return False, f"macrecovery exited with code {proc.returncode}"
     except Exception as e:
         return False, f"Download failed: {e}"
 

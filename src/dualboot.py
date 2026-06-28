@@ -210,8 +210,11 @@ def _scan_efi_dir(root: Path, info: BootloaderInfo):
     if not efi.exists():
         return
     known = {
-        "BOOT", "Microsoft", "ubuntu", "fedora", "debian", "arch", "manjaro",
-        "gentoo", "opensuse", "centos", "rhel", "OC", "refind", "systemd", "Linux",
+        "BOOT", "Microsoft",
+        "ubuntu", "fedora", "debian", "arch", "manjaro", "gentoo",
+        "opensuse", "centos", "rhel", "bazzite", "nobara", "pop",
+        "mint", "zorin", "elementary",
+        "OC", "refind", "systemd", "Linux",
         "HackMate-Extras", "HackMate", "tools", "Tools",
     }
     for sub in efi.iterdir():
@@ -221,7 +224,8 @@ def _scan_efi_dir(root: Path, info: BootloaderInfo):
         if n == "Microsoft" and (sub / "Boot" / "bootmgfw.efi").exists():
             info.windows = True
         elif n in ("ubuntu", "fedora", "debian", "arch", "manjaro",
-                   "gentoo", "opensuse", "centos", "rhel"):
+                   "gentoo", "opensuse", "centos", "rhel",
+                   "bazzite", "nobara", "pop", "mint", "zorin", "elementary"):
             if (sub / "grubx64.efi").exists():
                 info.linux_grub = True
         elif n == "systemd" and (sub / "systemd-bootx64.efi").exists():
@@ -251,14 +255,26 @@ def scan_all_bootloaders(disks: list[DiskInfo]) -> dict[str, BootloaderInfo]:
 def check_conflicts(disks: list[DiskInfo],
                     bootloaders: dict[str, BootloaderInfo]) -> list[str]:
     warnings: list[str] = []
-    oc_count = sum(1 for b in bootloaders.values() if b.opencore)
-    if oc_count > 1:
+
+    # Build a map of partition device → parent disk transport
+    part_transport: dict[str, str] = {}
+    for disk in disks:
+        for part in disk.partitions:
+            part_transport[part.device] = disk.transport.upper()
+
+    # Only count OC installs on non-USB drives; USB is the hackintosh installer
+    oc_on_internal = [
+        dev for dev, b in bootloaders.items()
+        if b.opencore and part_transport.get(dev, "") != "USB"
+    ]
+    if len(oc_on_internal) > 1:
         warnings.append(
-            f"{oc_count} EFI partitions already contain OpenCore — "
+            f"{len(oc_on_internal)} internal EFI partitions contain OpenCore — "
             "remove duplicates to avoid boot confusion"
         )
+
     for d in disks:
-        if not d.is_gpt:
+        if not d.is_gpt and d.transport.upper() not in ("USB",):
             warnings.append(
                 f"{d.device} ({d.model}) uses MBR/Legacy — macOS requires GPT"
             )

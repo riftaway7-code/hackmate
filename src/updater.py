@@ -217,9 +217,9 @@ def check_and_update(silent: bool = False) -> bool:
         if not ok:
             failed.append(filename)
 
-    VERSION_FILE.write_text(remote_sha)
-
-    if failed:
+    if not failed:
+        VERSION_FILE.write_text(remote_sha)
+    else:
         print(f"\n  Warning: {len(failed)} file(s) failed: {', '.join(failed)}")
 
     print("\n  Update complete — restarting...\n")

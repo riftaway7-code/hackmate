@@ -87,7 +87,7 @@ def _igpu_config(profile: HardwareProfile, headless: bool = False) -> tuple[byte
         if "630" in name:      return IG_PLATFORM_IDS["hd630"], None
         if "615" in name:      return IG_PLATFORM_IDS["hd615"], None
         return IG_PLATFORM_IDS["hd620"], None
-    elif gen == 8:
+    elif gen in (8, 9):
         if headless:
             if profile.platform == "desktop":
                 return IG_PLATFORM_IDS["uhd630_dt_headless"], None

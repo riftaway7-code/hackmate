@@ -57,14 +57,17 @@ MONO       = ("TkFixedFont", 10)
 MONO_SMALL = ("TkFixedFont", 9)
 TITLE_FONT = ("TkFixedFont", 13, "bold")
 
-BANNER = (
-    "██╗  ██╗ █████╗  ██████╗██╗  ██╗███╗   ███╗ █████╗ ████████╗███████╗\n"
-    "██║  ██║██╔══██╗██╔════╝██║ ██╔╝████╗ ████║██╔══██╗╚══██╔══╝██╔════╝\n"
-    "███████║███████║██║     █████╔╝ ██╔████╔██║███████║   ██║   █████╗  \n"
-    "██╔══██║██╔══██║██║     ██╔═██╗ ██║╚██╔╝██║██╔══██║   ██║   ██╔══╝  \n"
-    "██║  ██║██║  ██║╚██████╗██║  ██╗██║ ╚═╝ ██║██║  ██║   ██║   ███████╗\n"
-    "╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝"
-)
+BANNER_FONT = ("TkFixedFont", 40, "bold")
+
+
+def draw_banner(parent) -> tk.Frame:
+    """Terminal-style box-drawing ASCII art doesn't have guaranteed fixed-width
+    glyph metrics in Tk's font rendering (unlike an actual terminal), so it
+    overlaps and garbles. Use a plain letter-spaced wordmark instead."""
+    wrap = tk.Frame(parent, bg=BG)
+    tk.Label(wrap, text="H A C K M A T E", bg=BG, fg=ACCENT, font=BANNER_FONT).pack()
+    tk.Frame(wrap, bg=ACCENT, height=3, width=460).pack(pady=(8, 0))
+    return wrap
 
 
 def _get_version() -> str:
@@ -472,7 +475,7 @@ class WelcomeScreen(Screen):
     def on_show(self):
         wrap = tk.Frame(self, bg=BG)
         wrap.place(relx=0.5, rely=0.5, anchor="center")
-        tk.Label(wrap, text=BANNER, bg=BG, fg=ACCENT, font=MONO, justify="left").pack(pady=(0, 6))
+        draw_banner(wrap).pack(pady=(0, 6))
         tk.Label(wrap, text="Automated OpenCore EFI builder — any hardware",
                  bg=BG, fg=INFOC, font=FONT).pack(pady=(0, 18))
         btns = [

@@ -74,6 +74,15 @@ python setup.py
 
 > Always use `.venv\Scripts\python.exe` to run HackMate — not `python` or `uv run`. The venv ensures all dependencies are available.
 
+### GUI (Tkinter, no terminal required)
+
+Prefer a windowed app over the terminal UI? `hackmate_gui.py` is the same backend with a Tkinter frontend instead of Textual — no extra dependencies, `tkinter` ships with Python.
+
+```bash
+sudo .venv/bin/python3 src/hackmate_gui.py      # Linux / macOS
+.venv\Scripts\python.exe src\hackmate_gui.py    # Windows, run PowerShell as Administrator
+```
+
 ---
 
 ## What it does

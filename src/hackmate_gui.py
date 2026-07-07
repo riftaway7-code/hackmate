@@ -100,20 +100,79 @@ def ok_label(parent, text, **kw):
     return info(parent, text, fg=ACCENT, **kw)
 
 
+_BUTTON_STYLES = {
+    "primary":  "Primary.TButton",
+    "danger":   "Danger.TButton",
+    "back":     "Back.TButton",
+    "advanced": "Advanced.TButton",
+}
+
+
 def button(parent, text, command, kind="primary", width=None):
-    styles = {
-        "primary": dict(bg=ACCENT, fg=BLACK, activebackground="#00cc6e", activeforeground=BLACK),
-        "danger":  dict(bg=WARN,   fg=WHITE, activebackground="#cc3333", activeforeground=WHITE),
-        "back":    dict(bg="#222222", fg=INFOC, activebackground="#333333", activeforeground=FG),
-        "advanced": dict(bg=PANEL, fg="#3a3a3a", activebackground="#1a1a1a", activeforeground=ACCENT),
-    }
-    st = styles.get(kind, styles["primary"])
-    b = tk.Button(parent, text=text, command=command, font=FONT_BOLD,
-                  relief="flat", padx=12, pady=6, cursor="hand2", bd=0,
-                  highlightthickness=0, **st)
+    b = ttk.Button(parent, text=text, command=command, cursor="hand2",
+                    style=_BUTTON_STYLES.get(kind, "Primary.TButton"))
     if width:
         b.config(width=width)
     return b
+
+
+def configure_dark_theme(root: "tk.Tk"):
+    """macOS's native Aqua theme ignores custom colors on Button/Checkbutton/
+    Radiobutton/Scrollbar — switch to the cross-platform 'clam' theme so the
+    dark palette actually renders on every OS."""
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+
+    style.configure("Primary.TButton", background=ACCENT, foreground=BLACK,
+                     font=FONT_BOLD, borderwidth=0, padding=(12, 8))
+    style.map("Primary.TButton",
+              background=[("active", "#00cc6e"), ("pressed", "#00b87d")],
+              foreground=[("disabled", DIM)])
+
+    style.configure("Danger.TButton", background=WARN, foreground=WHITE,
+                     font=FONT_BOLD, borderwidth=0, padding=(12, 8))
+    style.map("Danger.TButton", background=[("active", "#cc3333"), ("pressed", "#b82e2e")])
+
+    style.configure("Back.TButton", background="#222222", foreground=INFOC,
+                     font=FONT_BOLD, borderwidth=0, padding=(12, 8))
+    style.map("Back.TButton",
+              background=[("active", "#333333"), ("pressed", "#3a3a3a")],
+              foreground=[("active", FG)])
+
+    style.configure("Advanced.TButton", background=PANEL, foreground="#3a3a3a",
+                     font=FONT_BOLD, borderwidth=0, padding=(6, 2))
+    style.map("Advanced.TButton",
+              background=[("active", "#1a1a1a")],
+              foreground=[("active", ACCENT)])
+
+    style.configure("TCheckbutton", background=BG, foreground=FG, font=FONT_SMALL)
+    style.map("TCheckbutton",
+              background=[("active", BG)],
+              foreground=[("active", ACCENT)],
+              indicatorcolor=[("selected", ACCENT), ("!selected", "#1a1a1a")])
+
+    style.configure("TRadiobutton", background=BG, foreground=FG, font=FONT_SMALL)
+    style.map("TRadiobutton",
+              background=[("active", BG)],
+              foreground=[("selected", ACCENT), ("active", ACCENT)],
+              indicatorcolor=[("selected", ACCENT), ("!selected", "#1a1a1a")])
+
+    style.configure("TProgressbar", background=ACCENT, troughcolor=PANEL,
+                     bordercolor=PANEL, lightcolor=ACCENT, darkcolor=ACCENT)
+
+    style.configure("TCombobox", fieldbackground="#1a1a1a", background="#1a1a1a",
+                     foreground=FG, arrowcolor=FG, bordercolor=BORDER,
+                     lightcolor="#1a1a1a", darkcolor="#1a1a1a")
+    style.map("TCombobox",
+              fieldbackground=[("readonly", "#1a1a1a")],
+              foreground=[("readonly", FG)])
+
+    style.configure("Vertical.TScrollbar", background=PANEL, troughcolor=BG,
+                     bordercolor=BG, arrowcolor=FG)
+    style.map("Vertical.TScrollbar", background=[("active", "#333333")])
 
 
 class Entry(tk.Entry):
@@ -166,14 +225,12 @@ class Entry(tk.Entry):
             self._show_placeholder()
 
 
-class Switch(tk.Checkbutton):
+class Switch(ttk.Checkbutton):
     """Boolean toggle, mirrors Textual's Switch widget."""
 
     def __init__(self, parent, value=False, **kw):
         self.var = tk.BooleanVar(value=value)
-        super().__init__(parent, variable=self.var, bg=BG, activebackground=BG,
-                          selectcolor="#1a1a1a", fg=ACCENT, highlightthickness=0,
-                          bd=0, onvalue=True, offvalue=False, **kw)
+        super().__init__(parent, variable=self.var, onvalue=True, offvalue=False, **kw)
 
     @property
     def value(self) -> bool:
@@ -240,7 +297,7 @@ class ScrollFrame(tk.Frame):
     def __init__(self, parent, **kw):
         super().__init__(parent, bg=BG, **kw)
         self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0)
-        vsb = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
         self.inner = tk.Frame(self.canvas, bg=BG)
         self.inner.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
@@ -313,6 +370,7 @@ class HackMateApp(tk.Tk):
         self.geometry("1000x740")
         self.minsize(860, 600)
         self.configure(bg=BG)
+        configure_dark_theme(self)
 
         self.container = tk.Frame(self, bg=BG)
         self.container.pack(fill="both", expand=True)
@@ -600,11 +658,8 @@ class ManualHardwareScreen(Screen):
     def _radio_group(self, parent, heading, options, var, none_value=""):
         section(parent, heading).pack(anchor="w", pady=(10, 2), fill="x")
         for key, label in options:
-            tk.Radiobutton(
+            ttk.Radiobutton(
                 parent, text=f"  {label}", variable=var, value=key,
-                bg=BG, fg=FG, selectcolor="#1a1a1a", activebackground=BG,
-                activeforeground=ACCENT, font=FONT_SMALL, anchor="w",
-                highlightthickness=0, bd=0,
             ).pack(anchor="w", fill="x")
 
     def on_show(self):

@@ -70,13 +70,13 @@ def ensure_macrecovery() -> Path:
         # Bundled EXE: macrecovery.py is in _MEIPASS, already exists
         return MACRECOVERY_PATH
     if not MACRECOVERY_PATH.exists():
-        import ssl
+        import ssl, urllib.error
         ctx = ssl.create_default_context()
         try:
             req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackMate/1.0"})
             with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
                 MACRECOVERY_PATH.write_bytes(r.read())
-        except ssl.SSLError:
+        except (ssl.SSLError, urllib.error.URLError):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             req = urllib.request.Request(MACRECOVERY_URL, headers={"User-Agent": "HackMate/1.0"})
@@ -137,20 +137,27 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
     if progress_cb:
         progress_cb("Connecting to Apple servers...")
 
+    # If Apple's CDN stalls mid-request, urlopen calls inside macrecovery.py have no
+    # timeout of their own — without a watchdog here, this hangs forever with zero
+    # feedback instead of failing with a retryable error.
+    STALL_TIMEOUT = 120  # seconds with no output before giving up
+
     try:
         if getattr(sys, "frozen", False):
             # In a PyInstaller EXE, sys.executable is HackMate.exe — can't use it to run scripts.
-            # Run macrecovery.py in-process via runpy. Stream stdout line-by-line as it's
-            # written (instead of buffering and forwarding only after the whole download
-            # finishes) so the UI doesn't sit frozen for the entire multi-GB download.
-            import runpy, io
+            # Run macrecovery.py in-process via runpy on a worker thread (so a stall can be
+            # detected and reported instead of blocking the whole app), streaming stdout
+            # line-by-line as it's written rather than buffering until completion.
+            import runpy, io, threading, time
 
             class _LiveStream(io.TextIOBase):
-                def __init__(self, cb):
+                def __init__(self, cb, activity):
                     self._cb = cb
                     self._pending = ""
+                    self._activity = activity
 
                 def write(self, s):
+                    self._activity[0] = time.monotonic()
                     self._pending += s
                     while "\n" in self._pending:
                         line, self._pending = self._pending.split("\n", 1)
@@ -162,20 +169,40 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
                 def flush(self):
                     pass
 
-            old_argv, old_stdout = sys.argv[:], sys.stdout
-            sys.argv = [str(script)] + script_args
-            sys.stdout = _LiveStream(progress_cb)
-            exit_code = 0
-            try:
-                runpy.run_path(str(script), run_name="__main__")
-            except SystemExit as e:
-                exit_code = e.code if isinstance(e.code, int) else 0
-            finally:
-                sys.stdout = old_stdout
-                sys.argv = old_argv
-            if exit_code != 0:
-                return False, f"macrecovery exited with code {exit_code}"
+            activity = [time.monotonic()]
+            result = {}
+
+            def _run():
+                old_argv, old_stdout = sys.argv[:], sys.stdout
+                sys.argv = [str(script)] + script_args
+                sys.stdout = _LiveStream(progress_cb, activity)
+                try:
+                    runpy.run_path(str(script), run_name="__main__")
+                    result["exit_code"] = 0
+                except SystemExit as e:
+                    result["exit_code"] = e.code if isinstance(e.code, int) else 0
+                except Exception as e:
+                    result["error"] = str(e)
+                finally:
+                    sys.stdout = old_stdout
+                    sys.argv = old_argv
+
+            worker = threading.Thread(target=_run, daemon=True)
+            worker.start()
+            while worker.is_alive():
+                worker.join(timeout=5)
+                if worker.is_alive() and time.monotonic() - activity[0] > STALL_TIMEOUT:
+                    return False, (
+                        f"Recovery download stalled (no response for {STALL_TIMEOUT}s) — "
+                        "Apple's CDN may be unreachable right now. Try again."
+                    )
+            if "error" in result:
+                return False, f"Download failed: {result['error']}"
+            if result.get("exit_code", 0) != 0:
+                return False, f"macrecovery exited with code {result['exit_code']}"
         else:
+            import threading, time, queue as _queue
+
             cmd = [sys.executable, str(script)] + script_args
             proc = subprocess.Popen(
                 cmd,
@@ -183,8 +210,27 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
                 stderr=subprocess.STDOUT,
                 text=True,
             )
+            line_q = _queue.Queue()
+
+            def _reader():
+                for line in proc.stdout:
+                    line_q.put(line)
+                line_q.put(None)
+
+            threading.Thread(target=_reader, daemon=True).start()
+
             last_msg = ""
-            for line in proc.stdout:
+            while True:
+                try:
+                    line = line_q.get(timeout=STALL_TIMEOUT)
+                except _queue.Empty:
+                    proc.kill()
+                    return False, (
+                        f"Recovery download stalled (no response for {STALL_TIMEOUT}s) — "
+                        "Apple's CDN may be unreachable right now. Try again."
+                    )
+                if line is None:
+                    break
                 line = line.strip()
                 if line and line != last_msg:
                     last_msg = line

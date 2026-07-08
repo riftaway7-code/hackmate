@@ -273,7 +273,8 @@ def _detect_cpu_windows(profile: HardwareProfile):
     elif vendor == "amd":
         _detect_amd_gen(profile)
 
-    profile.oc_platform = _OC_PLATFORM_MAP.get(profile.cpu_generation, profile.cpu_codename or "Unknown")
+    if vendor == "intel":
+        profile.oc_platform = _OC_PLATFORM_MAP.get(profile.cpu_generation, profile.cpu_codename or "Unknown")
 
     # Core/thread count
     try:
@@ -672,6 +673,29 @@ def _detect_cpu_macos(profile: HardwareProfile):
                 profile.cpu_codename = codename
                 profile.oc_platform = codename
                 break
+
+        # macOS's brand_string ("Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz") never
+        # actually contains "7th"/"8th" wording, so the keyword match above always
+        # misses on real Macs — fall back to parsing the model number like Linux/Windows do.
+        if not profile.cpu_generation:
+            m = re.search(r"i[3579]-(\d{4,5})", profile.cpu_name, re.IGNORECASE)
+            if m:
+                num = m.group(1)
+                d = int(num[:2]) if len(num) == 5 else (10 if num[0] == "1" else int(num[0]))
+                profile.cpu_generation = d if 2 <= d <= 14 else 0
+                codename_map = {
+                    2: "Sandy Bridge", 3: "Ivy Bridge", 4: "Haswell", 5: "Broadwell",
+                    6: "Skylake", 7: "Kaby Lake", 8: "Coffee Lake", 9: "Coffee Lake Refresh",
+                    10: "Ice Lake / Comet Lake", 11: "Tiger Lake", 12: "Alder Lake",
+                    13: "Raptor Lake", 14: "Raptor Lake Refresh",
+                }
+                profile.cpu_codename = codename_map.get(profile.cpu_generation, "Unknown")
+
+        if not profile.cpu_generation:
+            _infer_intel_gen_from_name(profile)
+
+        if not profile.oc_platform:
+            profile.oc_platform = _OC_PLATFORM_MAP.get(profile.cpu_generation, profile.cpu_codename or "Unknown")
     elif profile.cpu_vendor == "amd":
         _detect_amd_gen(profile)
 

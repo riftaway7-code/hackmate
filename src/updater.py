@@ -33,14 +33,14 @@ FILES = [
 
 
 def _get(url: str) -> dict | list | None:
-    import ssl
+    import ssl, urllib.error
     try:
         ctx = ssl.create_default_context()
         req = urllib.request.Request(url, headers={"User-Agent": "HackMate/1.0"})
         try:
             with urllib.request.urlopen(req, context=ctx, timeout=8) as r:
                 return json.loads(r.read())
-        except ssl.SSLError:
+        except (ssl.SSLError, urllib.error.URLError):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             with urllib.request.urlopen(req, context=ctx, timeout=8) as r:
@@ -84,7 +84,7 @@ def _get_changelog(base_sha: str, head_sha: str) -> list[str]:
 
 
 def _download_file(filename: str, sha: str) -> bool:
-    import ssl
+    import ssl, urllib.error
     url = f"https://raw.githubusercontent.com/{REPO}/{sha}/src/{filename}"
     dest = Path(__file__).parent / filename
     try:
@@ -93,7 +93,7 @@ def _download_file(filename: str, sha: str) -> bool:
         try:
             with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
                 dest.write_bytes(r.read())
-        except ssl.SSLError:
+        except (ssl.SSLError, urllib.error.URLError):
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             with urllib.request.urlopen(req, context=ctx, timeout=15) as r:

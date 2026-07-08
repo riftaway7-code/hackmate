@@ -73,9 +73,9 @@ def draw_banner(parent) -> tk.Frame:
 def _get_version() -> str:
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v1.4.1 ({sha})"
+        return f"v1.4.2 ({sha})"
     except Exception:
-        return "v1.4.1"
+        return "v1.4.2"
 
 
 VERSION = _get_version()

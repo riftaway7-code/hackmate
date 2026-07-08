@@ -140,12 +140,31 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
     try:
         if getattr(sys, "frozen", False):
             # In a PyInstaller EXE, sys.executable is HackMate.exe — can't use it to run scripts.
-            # Run macrecovery.py in-process via runpy, capturing stdout for progress.
+            # Run macrecovery.py in-process via runpy. Stream stdout line-by-line as it's
+            # written (instead of buffering and forwarding only after the whole download
+            # finishes) so the UI doesn't sit frozen for the entire multi-GB download.
             import runpy, io
+
+            class _LiveStream(io.TextIOBase):
+                def __init__(self, cb):
+                    self._cb = cb
+                    self._pending = ""
+
+                def write(self, s):
+                    self._pending += s
+                    while "\n" in self._pending:
+                        line, self._pending = self._pending.split("\n", 1)
+                        line = line.strip()
+                        if line and self._cb:
+                            self._cb(line)
+                    return len(s)
+
+                def flush(self):
+                    pass
+
             old_argv, old_stdout = sys.argv[:], sys.stdout
             sys.argv = [str(script)] + script_args
-            buf = io.StringIO()
-            sys.stdout = buf
+            sys.stdout = _LiveStream(progress_cb)
             exit_code = 0
             try:
                 runpy.run_path(str(script), run_name="__main__")
@@ -154,10 +173,6 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
             finally:
                 sys.stdout = old_stdout
                 sys.argv = old_argv
-            if progress_cb:
-                for line in buf.getvalue().splitlines():
-                    if line.strip():
-                        progress_cb(line.strip())
             if exit_code != 0:
                 return False, f"macrecovery exited with code {exit_code}"
         else:

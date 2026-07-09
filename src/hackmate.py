@@ -124,6 +124,7 @@ from kexts import select_kexts, get_alc_layout
 from smbios import generate as gen_smbios
 from config_gen import generate as gen_config, write_plist, _required_ssdts
 from recovery import compatible_versions, download_recovery, MacOSVersion
+from project_stats import fetch_project_stats, format_stats_panel
 
 CSS = """
 Screen                { background: #0d0d0d; }
@@ -178,6 +179,8 @@ Switch                { margin: 0 1 0 0; }
 .finding-warn         { color: #ffaa00; }
 .finding-info         { color: #888888; }
 .finding-context      { color: #2a2a2a; }
+#welcome-row          { height: 1fr; }
+#welcome-stats        { width: 26; padding: 1 0 0 3; border-left: solid #333333; }
 """
 
 BANNER = (
@@ -551,23 +554,39 @@ class WelcomeScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Container(
-            Vertical(
-                Static(BANNER,     classes="title",    id="banner"),
-                Static("Automated OpenCore EFI builder — any hardware", classes="info", id="subtitle"),
-                Static(""),
-                Button("Build EFI",              id="start",      classes="primary"),
-                Button("Build EFI (Manual)",     id="manual",     classes="primary"),
-                Button("Restore EFI",            id="restore",    classes="primary"),
-                Button("Dual Boot / Disk Map",   id="diskmap",    classes="primary"),
-                Button("USB Mapping",            id="usb_map",    classes="primary"),
-                Button("Edit Config",            id="edit_cfg",   classes="primary"),
-                Button("Check Logs",             id="check_logs", classes="primary"),
-                Button("Quit",                   id="quit",       classes="danger"),
-                id="welcome-inner"
+            Horizontal(
+                Vertical(
+                    Static(BANNER,     classes="title",    id="banner"),
+                    Static("Automated OpenCore EFI builder — any hardware", classes="info", id="subtitle"),
+                    Static(""),
+                    Button("Build EFI",              id="start",      classes="primary"),
+                    Button("Build EFI (Manual)",     id="manual",     classes="primary"),
+                    Button("Restore EFI",            id="restore",    classes="primary"),
+                    Button("Dual Boot / Disk Map",   id="diskmap",    classes="primary"),
+                    Button("USB Mapping",            id="usb_map",    classes="primary"),
+                    Button("Edit Config",            id="edit_cfg",   classes="primary"),
+                    Button("Check Logs",             id="check_logs", classes="primary"),
+                    Button("Quit",                   id="quit",       classes="danger"),
+                    id="welcome-inner"
+                ),
+                Vertical(
+                    Static("[#888888]loading stats…[/]", id="stats-body"),
+                    id="welcome-stats"
+                ),
+                id="welcome-row"
             ),
             id="welcome"
         )
         yield Footer()
+
+    def on_mount(self) -> None:
+        self._load_stats()
+
+    @work(thread=True)
+    def _load_stats(self) -> None:
+        data = fetch_project_stats()
+        panel = format_stats_panel(data)
+        self.app.call_from_thread(self.query_one("#stats-body", Static).update, panel)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start":

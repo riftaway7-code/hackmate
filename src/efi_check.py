@@ -42,6 +42,21 @@ def _kext_has_valid_structure(kext_path: Path, exec_path: str) -> tuple[bool, st
 def _smbios_is_placeholder(value: str) -> bool:
     return not value or value in ("", "00000000", "000000000000") or value.startswith("0000000")
 
+def _find_device_key(dev_props: dict, aliases: tuple, pci_path: str):
+    """
+    Locate a DeviceProperties entry by ACPI alias (IGPU, HDEF, ...) or by the
+    raw PciRoot path. HackMate writes raw PciRoot paths, hand-built EFIs and
+    other tools often write the alias form — both have to be recognised.
+    """
+    for key in dev_props:
+        upper = key.upper()
+        if any(alias in upper for alias in aliases):
+            return key
+    for key in dev_props:
+        if key.replace(" ", "").lower() == pci_path.lower():
+            return key
+    return None
+
 def _check_hardware_mismatch(cfg: dict, profile, results):
     def warn(msg): results.append(("warn",  msg))
     def info(msg): results.append(("info",  msg))
@@ -51,7 +66,7 @@ def _check_hardware_mismatch(cfg: dict, profile, results):
     kext_set    = {e.get("BundlePath", "").split("/")[0] for e in kernel_add}
     dev_props   = cfg.get("DeviceProperties", {}).get("Add", {})
 
-    igpu_key = next((k for k in dev_props if "IGPU" in k.upper() or "GFX0" in k.upper() or "B0D2" in k.upper()), None)
+    igpu_key = _find_device_key(dev_props, ("IGPU", "GFX0", "B0D2"), "PciRoot(0x0)/Pci(0x2,0x0)")
     if igpu_key and profile.gpu_vendor == "intel":
         stored_id = dev_props[igpu_key].get("AAPL,ig-platform-id")
         if stored_id:
@@ -71,7 +86,7 @@ def _check_hardware_mismatch(cfg: dict, profile, results):
             except Exception:
                 pass
 
-    audio_key = next((k for k in dev_props if "HDEF" in k.upper() or "HDAS" in k.upper() or "B0D3" in k.upper()), None)
+    audio_key = _find_device_key(dev_props, ("HDEF", "HDAS", "B0D3"), "PciRoot(0x0)/Pci(0x1f,0x3)")
     if audio_key:
         layout_raw = dev_props[audio_key].get("layout-id")
         if layout_raw:

@@ -164,14 +164,22 @@ def get_dsdt(tmp: Path) -> Optional[Path]:
 
 
 def find_iasl(ssdttime_dir: Path) -> Optional[Path]:
-    """Find the iasl compiler in SSDTTime Scripts dir"""
+    """
+    Find the iasl compiler in SSDTTime's Scripts dir.
+
+    SSDTTime downloads the compiler as `iasl-stable` (plus an `iasl-legacy`
+    fallback for older ACPI), not as a bare `iasl`, so look for every name it
+    can land under. Preference order is newest-first.
+    """
+    scripts = ssdttime_dir / "Scripts"
     if IS_WINDOWS:
-        iasl = ssdttime_dir / "Scripts" / "iasl.exe"
-        if iasl.exists():
-            return iasl
-    iasl = ssdttime_dir / "Scripts" / "iasl"
-    if iasl.exists():
-        return iasl
+        names = ("iasl.exe", "iasl-stable.exe", "iasl-legacy.exe")
+    else:
+        names = ("iasl-stable", "iasl", "iasl-legacy")
+    for name in names:
+        candidate = scripts / name
+        if candidate.exists():
+            return candidate
     return None
 
 

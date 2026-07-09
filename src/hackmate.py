@@ -99,6 +99,12 @@ if DEMO_MODE:
     sys.exit(0)
 
 from compat import require_admin, IS_WINDOWS, get_usb_drives, format_usb, mount_usb, unmount_usb, get_mount_path, get_tmp_dir
+
+if "--doctor" in sys.argv:
+    # Auditing only reads an EFI folder, so it needs neither root nor the TUI.
+    from efi_doctor import main as _doctor_main
+    sys.exit(_doctor_main(sys.argv))
+
 require_admin()
 
 from updater import check_and_update
@@ -181,6 +187,9 @@ Switch                { margin: 0 1 0 0; }
 .finding-context      { color: #2a2a2a; }
 #welcome-row          { height: 1fr; }
 #welcome-stats        { width: 26; padding: 1 0 0 3; border-left: solid #333333; }
+#health-targets       { height: 8; border: solid #333333; background: #111111; }
+#health-log           { height: 1fr; border: solid #222222; background: #0a0a0a; }
+#health-summary       { height: 2; }
 """
 
 BANNER = (
@@ -522,19 +531,21 @@ class USBMappingScreen(Screen):
                 shutil.rmtree(str(kext_dest))
             shutil.copytree(str(kext_src), str(kext_dest))
 
-            # Enable UTBMap and disable USBToolBox in config.plist
+            # Enable UTBMap in config.plist. USBToolBox.kext stays enabled — it is
+            # the driver that consumes the map, so disabling it leaves UTBMap inert.
             config_path = Path(mount) / "EFI" / "OC" / "config.plist"
             if config_path.exists():
                 try:
                     import plistlib
+                    from config_gen import sync_executable_paths
                     with open(config_path, "rb") as f:
                         cfg = plistlib.load(f)
                     for entry in cfg.get("Kernel", {}).get("Add", []):
                         name = entry.get("BundlePath", "").split("/")[0]
-                        if name == "UTBMap.kext":
+                        if name in ("UTBMap.kext", "USBToolBox.kext"):
                             entry["Enabled"] = True
-                        elif name == "USBToolBox.kext":
-                            entry["Enabled"] = False
+                    # A USBToolBox map is a plist-only bundle; make the config say so.
+                    sync_executable_paths(cfg, Path(mount) / "EFI" / "OC" / "Kexts")
                     with open(config_path, "wb") as f:
                         plistlib.dump(cfg, f)
                 except Exception:
@@ -561,6 +572,7 @@ class WelcomeScreen(Screen):
                     Static(""),
                     Button("Build EFI",              id="start",      classes="primary"),
                     Button("Build EFI (Manual)",     id="manual",     classes="primary"),
+                    Button("EFI Health Check",       id="health",     classes="primary"),
                     Button("Restore EFI",            id="restore",    classes="primary"),
                     Button("Dual Boot / Disk Map",   id="diskmap",    classes="primary"),
                     Button("USB Mapping",            id="usb_map",    classes="primary"),
@@ -593,6 +605,8 @@ class WelcomeScreen(Screen):
             self.app.push_screen(ScanScreen())
         elif event.button.id == "manual":
             self.app.push_screen(ManualHardwareScreen())
+        elif event.button.id == "health":
+            self.app.push_screen(HealthCheckScreen())
         elif event.button.id == "restore":
             self.app.push_screen(RestoreScreen())
         elif event.button.id == "edit_cfg":
@@ -605,6 +619,132 @@ class WelcomeScreen(Screen):
             self.app.push_screen(LogCheckerScreen())
         elif event.button.id == "quit":
             self.app.exit()
+
+class HealthCheckScreen(Screen):
+    """Audit any OpenCore EFI — a mounted partition, a USB, or a folder path."""
+
+    LEVEL_STYLE = {
+        "critical": ("red",      "✗"),
+        "warn":     ("yellow",   "⚠"),
+        "info":     ("#5599ff",  "ℹ"),
+        "ok":       ("green",    "✓"),
+    }
+
+    def compose(self) -> ComposeResult:
+        from efi_doctor import find_efi_candidates
+        self._mounted = find_efi_candidates()
+        self._drives  = get_usb_drives()
+
+        items = [ListItem(Label(f"  {p}"), id=f"efi-{i}")
+                 for i, p in enumerate(self._mounted)]
+        items += [ListItem(Label(f"  USB: {n}   {s}   {l}"), id=f"usb-{i}")
+                  for i, (n, s, l) in enumerate(self._drives)]
+        if not items:
+            items = [ListItem(Label("  Nothing detected — type a path below"))]
+
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── EFI Health Check ─────────────────────────────────────", classes="title"),
+                Static("  Inspects an OpenCore EFI for problems that still let it boot:", classes="info"),
+                Static("  orphaned ACPI renames, kexts that never inject, unmapped USB, SIP state.", classes="info"),
+                Static(""),
+                ListView(*items, id="health-targets"),
+                Static("  Or enter a path to an EFI folder:", classes="info"),
+                Input(placeholder="/Volumes/EFI/EFI", id="health-path"),
+                Horizontal(
+                    Button("Run Health Check", id="run",  classes="primary"),
+                    Button("← Back",           id="back", classes="back"),
+                ),
+                Static("", id="health-summary"),
+                RichLog(id="health-log", markup=True, auto_scroll=False),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "run":
+            self._run_check()
+        elif event.button.id == "back":
+            self.app.pop_screen()
+
+    def _selected_target(self):
+        """(path, usb_device) — usb_device is set when the EFI must be mounted first."""
+        typed = self.query_one("#health-path", Input).value.strip()
+        if typed:
+            return Path(typed), None
+
+        index = self.query_one("#health-targets", ListView).index
+        if index is None:
+            return None, None
+        if index < len(self._mounted):
+            return self._mounted[index], None
+        usb_index = index - len(self._mounted)
+        if usb_index < len(self._drives):
+            return None, self._drives[usb_index][0]
+        return None, None
+
+    @work(thread=True)
+    def _run_check(self) -> None:
+        from efi_health import audit, summarise
+
+        log     = self.query_one("#health-log", RichLog)
+        summary = self.query_one("#health-summary", Static)
+        self.app.call_from_thread(log.clear)
+
+        path, usb = self._selected_target()
+        if path is None and usb is None:
+            self.app.call_from_thread(summary.update, "  [yellow]Pick a target or enter a path.[/yellow]")
+            return
+
+        mounted_here = False
+        try:
+            if usb:
+                mount = get_mount_path(usb, skip_format=True)
+                if not IS_WINDOWS:
+                    mount_usb(usb, mount)
+                mounted_here = True
+                path = Path(mount) / "EFI"
+
+            if not path.is_dir():
+                self.app.call_from_thread(summary.update, f"  [red]Not found: {path}[/red]")
+                return
+
+            findings = audit(path)
+            counts   = summarise(findings)
+
+            self.app.call_from_thread(log.write, f"[#666666]{path}[/#666666]\n")
+            for level in ("critical", "warn", "info", "ok"):
+                for lvl, title, detail in findings:
+                    if lvl != level:
+                        continue
+                    color, symbol = self.LEVEL_STYLE[lvl]
+                    self.app.call_from_thread(log.write, f"[{color}]{symbol} {title}[/{color}]")
+                    if detail:
+                        self.app.call_from_thread(log.write, f"[#666666]   {detail}[/#666666]")
+
+            if counts["critical"]:
+                text = (f"  [red]{counts['critical']} critical[/red] · "
+                        f"[yellow]{counts['warn']} warning(s)[/yellow] · "
+                        f"[#666666]{counts['info']} note(s)[/#666666] — this EFI will not boot correctly")
+            elif counts["warn"]:
+                text = (f"  [yellow]{counts['warn']} warning(s)[/yellow] · "
+                        f"[#666666]{counts['info']} note(s)[/#666666] · "
+                        f"[green]{counts['ok']} passed[/green]")
+            else:
+                text = f"  [green]No problems found[/green] — {counts['ok']} checks passed"
+            self.app.call_from_thread(summary.update, text)
+
+        except Exception as e:
+            self.app.call_from_thread(summary.update, f"  [red]Health check failed: {e}[/red]")
+        finally:
+            if mounted_here and not IS_WINDOWS:
+                try:
+                    unmount_usb(get_mount_path(usb, skip_format=True))
+                except Exception:
+                    pass
+
 
 class RestoreScreen(Screen):
     def compose(self) -> ComposeResult:
@@ -1946,6 +2086,29 @@ class InstallScreen(Screen):
             mount = self.app.efi_output_path
 
         try:
+            # Resolve every kext download before the USB is formatted. A dead
+            # source found later would be silently dropped from config.plist,
+            # and the user would only notice when that hardware doesn't work.
+            ui(1, "Checking kext sources...")
+            log("── Checking kext download sources...", "header")
+            from kexts import select_kexts, check_kext_sources, download_kexts
+            kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
+            src_results, release_cache = check_kext_sources(
+                kexts,
+                progress_cb=lambda i, n, m: self.app.call_from_thread(
+                    self._status, 1 + int((i / max(n, 1)) * 4), m),
+            )
+            dead = [n for n, r in src_results.items() if r.startswith("ERROR")]
+            checked = [n for n, r in src_results.items() if not r.startswith("SKIP")]
+            if dead and len(dead) == len(checked):
+                log("  Could not reach any kext source — check your internet connection.", "warn")
+            elif dead:
+                for name in dead:
+                    log(f"  {name}: {src_results[name]}", "warn")
+                log(f"  {len(dead)} kext(s) cannot be downloaded and will be skipped.", "warn")
+            else:
+                log(f"  All {len(checked)} kext sources reachable", "ok")
+
             if local_mode:
                 ui(2, "Preparing EFI output folder...")
                 log("── Local EFI mode: generating EFI folder without USB", "header")
@@ -2074,7 +2237,7 @@ class InstallScreen(Screen):
             ui(40, "Generating config.plist...")
             log("── Generating config.plist...", "header")
             from config_gen import generate as gen_config, write_plist, _required_ssdts
-            macos_major = int(version.version) if version and version.version.isdigit() else 0
+            macos_major = version.major if version else 0
             dual_boot = getattr(self.app, "dual_boot", "")
             config = gen_config(profile, smbios, macos_major, wifi_kext_mode=self.app.wifi_kext_mode, dual_boot=dual_boot)
             if self.app.disable_dgpu:
@@ -2087,8 +2250,6 @@ class InstallScreen(Screen):
 
             ui(45, "Selecting kexts...")
             log("── Selecting kexts...", "header")
-            from kexts import select_kexts, download_kexts
-            kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
             log(f"  {len(kexts)} kexts selected for this hardware", "ok")
 
             ui(50, f"{'Verifying' if repair else 'Downloading'} {len(kexts)} kexts...")
@@ -2099,7 +2260,8 @@ class InstallScreen(Screen):
                 self.app.call_from_thread(self._status, pct, msg)
                 self.app.call_from_thread(self._log, f"  [{i+1}/{n}] {msg}", "info")
 
-            results = download_kexts(kexts, kext_dir, progress_cb=kext_progress, verify=repair)
+            results = download_kexts(kexts, kext_dir, progress_cb=kext_progress, verify=repair,
+                                    release_cache=release_cache)
             ok_count  = sum(1 for v in results.values() if v.startswith("OK"))
             err_count = sum(1 for v in results.values() if v.startswith("ERROR"))
             log(f"  {ok_count} kexts downloaded successfully", "ok")
@@ -2108,10 +2270,13 @@ class InstallScreen(Screen):
                 if result.startswith("ERROR"):
                     log(f"  WARN: {name} — {result}", "warn")
 
-            # Remove failed kexts from config.plist so missing .kext files don't prevent booting
+            # Remove failed kexts from config.plist so missing .kext files don't prevent booting,
+            # then point every surviving entry at the binary its bundle actually contains.
+            import plistlib
+            from config_gen import sync_executable_paths
+            cfg = plistlib.loads(config_path.read_bytes())
+
             if failed_kexts:
-                import plistlib
-                cfg = plistlib.loads(config_path.read_bytes())
                 before = len(cfg["Kernel"]["Add"])
                 cfg["Kernel"]["Add"] = [
                     k for k in cfg["Kernel"]["Add"]
@@ -2119,8 +2284,13 @@ class InstallScreen(Screen):
                 ]
                 removed = before - len(cfg["Kernel"]["Add"])
                 if removed:
-                    config_path.write_bytes(plistlib.dumps(cfg, fmt=plistlib.FMT_XML))
                     log(f"  Removed {removed} failed kext(s) from config.plist to keep EFI bootable", "warn")
+
+            corrected = sync_executable_paths(cfg, kext_dir)
+            if corrected:
+                log(f"  Corrected ExecutablePath for {len(corrected)} kext(s): {', '.join(corrected)}", "ok")
+
+            config_path.write_bytes(plistlib.dumps(cfg, fmt=plistlib.FMT_XML))
 
             # Extras — HeliPort (itlwm users) and USBToolBox app (everyone)
             from kexts import download_heliport, download_usbtoolbox_app
@@ -2254,17 +2424,21 @@ class InstallScreen(Screen):
 
             # ssdt.py handles 3-tier fallback internally (SSDTTime → template → bundled .aml).
             # If any SSDT still shows SKIP/ERROR here, it genuinely couldn't be generated —
-            # remove it from config.plist so OpenCore doesn't fail on a missing file.
+            # remove it from config.plist, along with any ACPI rename that pointed at it,
+            # so OpenCore neither loads a missing file nor applies an orphaned rename.
             if skip_ssdts or err_ssdts:
                 import plistlib
+                from config_gen import strip_missing_ssdts
                 with open(str(config_path), "rb") as f:
                     cfg = plistlib.load(f)
                 # Only remove SSDTs that are truly absent from acpi_dir
-                bad = {f"{n}.aml" for n in skip_ssdts + err_ssdts
-                       if not (acpi_dir / f"{n}.aml").exists()}
-                cfg["ACPI"]["Add"] = [e for e in cfg["ACPI"]["Add"] if e.get("Path","") not in bad]
+                missing = [n for n in skip_ssdts + err_ssdts
+                           if not (acpi_dir / f"{n}.aml").exists()]
+                tables_gone, patches_gone = strip_missing_ssdts(cfg, missing)
                 with open(str(config_path), "wb") as f:
                     plistlib.dump(cfg, f)
+                if patches_gone:
+                    log(f"  Removed {patches_gone} ACPI rename(s) left without their SSDT", "info")
 
             for n in ok_ssdts:
                 log(f"  {n}.aml", "ok")
@@ -2869,9 +3043,9 @@ class DemoScreen(Screen):
 def _get_version() -> str:
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v1.4.2 ({sha})"
+        return f"v1.5.0 ({sha})"
     except Exception:
-        return "v1.4.2"
+        return "v1.5.0"
 
 VERSION = _get_version()
 

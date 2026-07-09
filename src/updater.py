@@ -15,8 +15,12 @@ API_URL      = f"https://api.github.com/repos/{REPO}/commits/{BRANCH}"
 COMPARE_URL  = f"https://api.github.com/repos/{REPO}/compare/{{base}}...{{head}}"
 VERSION_FILE = Path(__file__).parent / ".version"
 
+# Every module hackmate.py can import. A file missing from this list is never
+# downloaded, so shipping a new module without adding it here leaves anyone who
+# auto-updates with an ImportError on launch.
 FILES = [
     "hackmate.py",
+    "hackmate_gui.py",
     "hardware.py",
     "kexts.py",
     "config_gen.py",
@@ -25,10 +29,15 @@ FILES = [
     "ssdt.py",
     "updater.py",
     "efi_check.py",
+    "efi_health.py",
+    "efi_doctor.py",
     "compat.py",
     "oc_log.py",
     "config_editor.py",
     "log_checker.py",
+    "dualboot.py",
+    "partutil.py",
+    "project_stats.py",
 ]
 
 
@@ -183,9 +192,22 @@ def check_and_update(silent: bool = False) -> bool:
     # Running from source — update .py files as normal
     missing = [f for f in FILES if not (base_dir / f).exists()]
 
-    if remote_sha == local_sha and not missing:
-        print("up to date.")
-        return False
+    if remote_sha == local_sha:
+        if not missing:
+            print("up to date.")
+            return False
+        # Already on the right commit but some modules never landed — an older
+        # updater didn't know about them. Repair silently; asking here would let
+        # the user decline into an app that cannot import its own modules.
+        print(f"repairing {len(missing)} missing file(s)...")
+        failed = [f for f in missing if not _download_file(f, remote_sha)]
+        for f in missing:
+            print(f"  {'✗' if f in failed else '✓'} {f}")
+        if failed:
+            print(f"\n  Warning: could not fetch {', '.join(failed)}")
+            return False
+        print("\n  Repair complete — restarting...\n")
+        return True
 
     short = remote_sha[:7]
     print(f"new version available ({short})\n")

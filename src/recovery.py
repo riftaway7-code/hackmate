@@ -20,7 +20,7 @@ MACRECOVERY_PATH = _macrecovery_path()
 @dataclass
 class MacOSVersion:
     name: str
-    version: str          # human readable e.g. "13"
+    version: str          # marketing version, e.g. "13" or "10.15"
     board_id: str
     mlb: str
     os_flag: str = ""     # "--os latest" for Tahoe
@@ -28,6 +28,18 @@ class MacOSVersion:
     max_gen: int = 99     # maximum CPU generation supported
     nvidia_ok: bool = True
     notes: str = ""
+
+    @property
+    def slug(self) -> str:
+        """Filesystem-safe unique id. Big Sur (11) and El Capitan (10.11) must
+        not share a recovery cache directory."""
+        return self.version.replace(".", "_")
+
+    @property
+    def major(self) -> int:
+        """Major version used for boot-arg decisions. Legacy releases are 10.x,
+        so their major is 10 — not the minor number after the dot."""
+        return int(self.version.split(".")[0])
 
 
 MACOS_VERSIONS = [
@@ -37,12 +49,12 @@ MACOS_VERSIONS = [
     MacOSVersion("macOS Ventura (13)",    "13", "Mac-B4831CEBD52A0C4C", "00000000000000000", min_gen=6,  notes="Intel 6th gen+"),
     MacOSVersion("macOS Monterey (12)",   "12", "Mac-E43C1C25D4880AD6", "00000000000000000", min_gen=5,  notes="Intel 5th gen+"),
     MacOSVersion("macOS Big Sur (11)",    "11", "Mac-2BD1B31983FE1663", "00000000000000000", min_gen=4,  notes="Intel 4th gen+"),
-    MacOSVersion("macOS Catalina (10.15)","15", "Mac-CFF7D910A743CAAF", "00000000000PHCD00", min_gen=4,  nvidia_ok=False, notes="Last 32-bit app support"),
-    MacOSVersion("macOS Mojave (10.14)",  "14", "Mac-7BA5B2DFE22DDD8C", "00000000000KXPG00", min_gen=3,  nvidia_ok=False, notes="Last Metal-optional"),
-    MacOSVersion("macOS High Sierra (10.13)","13","Mac-7BA5B2D9E42DDD94","00000000000J80300",min_gen=2,  nvidia_ok=True,  notes="Last NVIDIA web driver support"),
-    MacOSVersion("macOS Sierra (10.12)",  "12", "Mac-77F17D7DA9285301", "00000000000J0DX00", min_gen=2,  nvidia_ok=True,  notes=""),
-    MacOSVersion("macOS El Capitan (10.11)","11","Mac-FFE5EF870D7BA81A","00000000000GQRX00",min_gen=2,  nvidia_ok=True,  notes=""),
-    MacOSVersion("macOS Yosemite (10.10)","10", "Mac-E43C1C25D4880AD6", "00000000000GDVW00", min_gen=2,  nvidia_ok=True,  notes=""),
+    MacOSVersion("macOS Catalina (10.15)","10.15", "Mac-CFF7D910A743CAAF", "00000000000PHCD00", min_gen=4,  nvidia_ok=False, notes="Last 32-bit app support"),
+    MacOSVersion("macOS Mojave (10.14)",  "10.14", "Mac-7BA5B2DFE22DDD8C", "00000000000KXPG00", min_gen=3,  nvidia_ok=False, notes="Last Metal-optional"),
+    MacOSVersion("macOS High Sierra (10.13)","10.13","Mac-7BA5B2D9E42DDD94","00000000000J80300",min_gen=2,  nvidia_ok=True,  notes="Last NVIDIA web driver support"),
+    MacOSVersion("macOS Sierra (10.12)",  "10.12", "Mac-77F17D7DA9285301", "00000000000J0DX00", min_gen=2,  nvidia_ok=True,  notes=""),
+    MacOSVersion("macOS El Capitan (10.11)","10.11","Mac-FFE5EF870D7BA81A","00000000000GQRX00",min_gen=2,  nvidia_ok=True,  notes=""),
+    MacOSVersion("macOS Yosemite (10.10)","10.10", "Mac-E43C1C25D4880AD6", "00000000000GDVW00", min_gen=2,  nvidia_ok=True,  notes=""),
 ]
 
 
@@ -98,7 +110,7 @@ _CACHE_DIR = _real_home() / ".hackmate" / "cache" / "recovery"
 
 def _cached_recovery_files(version: MacOSVersion) -> list[Path]:
     """Return cached recovery files for this version if they exist."""
-    cache = _CACHE_DIR / version.version
+    cache = _CACHE_DIR / version.slug
     if not cache.exists():
         return []
     files = list(cache.glob("*.dmg")) + list(cache.glob("*.chunklist")) + list(cache.glob("com.apple.*"))
@@ -248,7 +260,7 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
 
     # Cache for future use
     try:
-        cache = _CACHE_DIR / version.version
+        cache = _CACHE_DIR / version.slug
         cache.mkdir(parents=True, exist_ok=True)
         for f in files:
             shutil.copy2(f, cache / f.name)

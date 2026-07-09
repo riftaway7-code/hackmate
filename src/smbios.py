@@ -118,15 +118,17 @@ def generate_serial(model: str) -> str:
 
     return f"{factory}{year_code}{week}{unique}{suffix}"
 
+MLB_LENGTH = 17
+
 def generate_mlb(model: str) -> str:
     prefixes = MLB_PREFIXES.get(model)
     if prefixes:
         prefix = random.choice(prefixes)
-        tail = _rand_upper(4)
-        return f"{prefix}{tail}"
+        # Pad out to a full-length MLB — a short board serial is rejected by
+        # Apple's activation servers, so iMessage/FaceTime never come up.
+        return f"{prefix}{_rand_upper(MLB_LENGTH - len(prefix))}"
 
-    # generic fallback: real MLBs are 17 chars
-    return f"C02{_rand_upper(8)}HACD{_rand_upper(2)}"
+    return f"C02{_rand_upper(8)}HACD{_rand_upper(MLB_LENGTH - 15)}"
 
 def generate_uuid() -> str:
     return str(uuid.uuid4()).upper()

@@ -119,9 +119,9 @@ def _igpu_config(profile: HardwareProfile, headless: bool = False) -> tuple[byte
 
 LOAD_ORDER = [
     "Lilu", "FakeSMC", "VirtualSMC",
-    "WhateverGreen", "NootedRed", "NootedBlue", "NootRX",
+    "WhateverGreen", "NootedRed", "NootRX",
     "AppleALC", "VoodooHDA", "CodecCommander",
-    "RestrictEvents", "FeatureUnlock", "CryptexFixup", "AMFIPass",
+    "RestrictEvents", "FeatureUnlock", "CryptexFixup",
     "CPUFriend",
     "AMDRyzenCPUPowerManagement", "SMCAMDProcessor",
     "SMCBatteryManager", "SMCProcessor", "SMCSuperIO", "SMCLightSensor",
@@ -135,7 +135,7 @@ LOAD_ORDER = [
     "ECEnabler", "ACPIBatteryManager",
     "NullCPUPowerManagement", "CpuTopologyRebuild",
     "AmdTSCSync", "ForgedInvariant", "VoodooTSCSync",
-    "HibernationFixup", "NVMeFix", "CtlnaAHCIPort",
+    "HibernationFixup", "NVMeFix",
     "IntelMausiEthernet", "AppleIGC", "AppleIntelE1000e", "AppleIntelI210Ethernet",
     "RealtekRTL8111", "RealtekRTL8100", "RealtekR1000", "LucyRTL8125Ethernet",
     "AtherosE2200Ethernet", "AtherosL1Ethernet", "AtherosL1eEthernet", "BCM5722D",
@@ -154,8 +154,7 @@ LOAD_ORDER = [
     "VoodooSMBus", "VoodooRMI",
     "YogaSMC", "AsusSMC",
     "BrightnessKeys", "NoTouchID",
-    "USBToolBox", "UTBMap", "USBInjectAll", "GenericUSBXHCI", "XHCI-unsupported",
-    "IOElectrify", "ThunderboltReset",
+    "USBToolBox", "UTBMap", "USBInjectAll", "XHCI-unsupported",
     "RealtekCardReader", "RealtekCardReaderFriend", "Sinetek-rtsx",
     "JMicronATA", "AHCIPortInjector",
     "DebugEnhancer",
@@ -170,19 +169,23 @@ NO_EXECUTABLE = {
     "FakeSMC_LPCSensors", "FakeSMC_SMMSensors",
     "NullEthernet",
     "VoodooGPIO",
+    # USBToolBox port maps are pure Info.plist bundles — giving them an
+    # ExecutablePath makes OpenCore fail to inject the map once it's enabled.
+    "UTBMap", "UTBDefault",
 }
 
-# Min/Max kernel versions for version-specific kexts
+# Min/Max kernel versions for version-specific kexts.
+# Windows must not overlap between kexts that replace one another, or both load
+# at once and conflict. Darwin: 14=10.10, 18=10.14, 19=10.15, 20=11, 21=12, 22=13
 KERNEL_VERSIONS: dict[str, tuple[str, str]] = {
-    "BrcmPatchRAM":        ("", "19.9.9"),     # macOS 10.10 and below
-    "BrcmPatchRAM2":       ("", "20.9.9"),     # macOS 10.11-11
-    "BrcmPatchRAM3":       ("20.0.0", ""),     # macOS 12+
-    "BrcmBluetoothInjector":("", "21.9.9"),   # macOS 12 and below
+    "BrcmPatchRAM":        ("", "14.9.9"),     # macOS 10.10 and below
+    "BrcmPatchRAM2":       ("15.0.0", "18.9.9"),  # macOS 10.11-10.14
+    "BrcmPatchRAM3":       ("19.0.0", ""),     # macOS 10.15+
+    "BrcmBluetoothInjector":("", "20.9.9"),   # macOS 11 and below (BlueToolFixup takes over on 12+)
     "BlueToolFixup":       ("21.0.0", ""),     # macOS 12+
     "IntelBTPatcher":      ("20.0.0", ""),     # macOS 11+
     "IntelBluetoothInjector":("", "20.9.9"),  # macOS 11 and below
     "AirportItlwm":        ("19.0.0", ""),     # macOS 10.15+
-    "CtlnaAHCIPort":       ("20.0.0", ""),     # macOS 11+
     "XHCI-unsupported":    ("", "19.9.9"),     # macOS 10.15 and below
     "CryptexFixup":        ("22.0.0", ""),     # macOS 13+
 }
@@ -219,7 +222,8 @@ def _required_ssdts(profile: HardwareProfile, kexts: list[KextEntry]) -> list[st
     if gen in (2, 3):
         ssdts.append("SSDT-IMEI")
 
-    # Embedded controller
+    # Embedded controller. The laptop table also declares _SB.USBX, so laptops
+    # must not additionally load SSDT-USBX or the device is defined twice.
     if profile.platform == "laptop":
         ssdts.append("SSDT-EC-USBX")
     else:
@@ -242,11 +246,16 @@ def _required_ssdts(profile: HardwareProfile, kexts: list[KextEntry]) -> list[st
         ssdts.append("SSDT-GPI0")
         ssdts.append("SSDT-XOSI")
 
-    # USB power — laptops
-    if profile.platform == "laptop":
-        ssdts.append("SSDT-USBX")
-
     return ssdts
+
+# An ACPI rename is only safe when the SSDT that defines its replacement is
+# actually loaded. Renaming _OSI to XOSI without SSDT-XOSI, for example, points
+# every firmware _OSI call at a method that does not exist.
+PATCH_REQUIRES_SSDT: dict[str, str] = {
+    "OSID to XSID":  "SSDT-XOSI",
+    "_OSI to XOSI":  "SSDT-XOSI",
+    "GPRW to XGPR":  "SSDT-GPRW",
+}
 
 def _acpi_add(ssdts: list[str]) -> list[dict]:
     return [
@@ -258,8 +267,14 @@ def _acpi_add(ssdts: list[str]) -> list[dict]:
         for ssdt in ssdts
     ]
 
-def _acpi_patches(profile: HardwareProfile) -> list[dict]:
+def _acpi_patches(profile: HardwareProfile, ssdts: list[str]) -> list[dict]:
+    """
+    Build the ACPI rename list. Every rename here redirects a firmware symbol at
+    a replacement supplied by an SSDT, so a rename is only emitted when the SSDT
+    providing that replacement is in `ssdts`.
+    """
     patches = []
+    loaded = set(ssdts)
 
     def patch(comment, find, replace, count=0, table=""):
         return {
@@ -279,16 +294,21 @@ def _acpi_patches(profile: HardwareProfile) -> list[dict]:
             "TableSignature":   table.encode() if table else b"",
         }
 
-    # EC rename: common for older laptops
-    if profile.platform == "laptop" and profile.cpu_generation < 8:
-        patches.append(patch("EC0 to EC", "4543305f", "45435f5f", table="DSDT"))
+    def add(comment, find, replace, **kw):
+        required = PATCH_REQUIRES_SSDT.get(comment)
+        if required and required not in loaded:
+            return
+        patches.append(patch(comment, find, replace, **kw))
 
-    # XOSI rename — needed for I2C trackpad OS check spoof
-    patches.append(patch("OSID to XSID", "4F534944", "58534944"))
-    patches.append(patch("_OSI to XOSI", "5F4F5349", "584F5349"))
+    # XOSI spoof — lets the DSDT's Windows-only branches run under macOS.
+    # SSDT-XOSI supplies the XOSI method these renames point at.
+    add("OSID to XSID", "4F534944", "58534944")
+    add("_OSI to XOSI", "5F4F5349", "584F5349")
 
-    # _PRW to XPRW — fixes wake on USB
-    patches.append(patch("_PRW to XPRW", "5F505257", "58505257"))
+    # Instant-wake fix. The DSDT's _PRW objects call GPRW; we rename the stock
+    # GPRW aside to XGPR so SSDT-GPRW can supply a GPRW that masks GPE 0x6D/0x0D
+    # and delegates everything else back to XGPR.
+    add("GPRW to XGPR", "47505257", "58475052")
 
     return patches
 
@@ -700,7 +720,7 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
         "ACPI": {
             "Add":    _acpi_add(ssdts),
             "Delete": [],
-            "Patch":  _acpi_patches(profile),
+            "Patch":  _acpi_patches(profile, ssdts),
             "Quirks": {
                 "FadtEnableReset":      False,
                 "NormalizeHeaders":     False,
@@ -763,6 +783,74 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
         "PlatformInfo":     _platform_info(smbios),
         "UEFI":             _uefi_section(profile, dual_boot=dual_boot),
     }
+
+def sync_executable_paths(config: dict, kext_dir: Path) -> list[str]:
+    """
+    Rewrite every kext's ExecutablePath from the bundle that was actually
+    downloaded, reading CFBundleExecutable out of its Info.plist.
+
+    The name of a kext's binary is not reliably its bundle name (itlwm.kext ships
+    `itlwm`, IntelMausi.kext ships `IntelMausi`) and plist-only bundles such as
+    USB port maps have no binary at all. An ExecutablePath that points at a file
+    which is not there makes OpenCore refuse to inject the kext, so the bundle on
+    disk is the only trustworthy source. Returns the BundlePaths that changed.
+    """
+    fixed: list[str] = []
+
+    for entry in config.get("Kernel", {}).get("Add", []):
+        bundle_path = entry.get("BundlePath", "")
+        if not bundle_path:
+            continue
+
+        kext = kext_dir / bundle_path
+        info = kext / "Contents" / "Info.plist"
+        if not info.exists():
+            continue
+
+        try:
+            plist = plistlib.loads(info.read_bytes())
+        except Exception:
+            continue
+
+        exe = plist.get("CFBundleExecutable", "")
+        want = f"Contents/MacOS/{exe}" if exe else ""
+        if want and not (kext / want).exists():
+            want = ""
+
+        if entry.get("ExecutablePath", "") != want:
+            entry["ExecutablePath"] = want
+            fixed.append(bundle_path)
+
+    return fixed
+
+def strip_missing_ssdts(config: dict, missing: list[str]) -> tuple[int, int]:
+    """
+    Drop ACPI/Add entries for SSDTs that could not be generated, along with any
+    rename that depended on them.
+
+    A rename left behind after its SSDT is dropped points firmware symbols at a
+    replacement that no longer exists, which is worse than applying no patch at
+    all. Returns (tables_removed, patches_removed).
+    """
+    gone = set(missing)
+    if not gone:
+        return 0, 0
+
+    acpi = config.setdefault("ACPI", {})
+
+    tables = acpi.get("Add", [])
+    bad_paths = {f"{name}.aml" for name in gone}
+    kept_tables = [e for e in tables if e.get("Path", "") not in bad_paths]
+    acpi["Add"] = kept_tables
+
+    patches = acpi.get("Patch", [])
+    kept_patches = [
+        p for p in patches
+        if PATCH_REQUIRES_SSDT.get(p.get("Comment", "")) not in gone
+    ]
+    acpi["Patch"] = kept_patches
+
+    return len(tables) - len(kept_tables), len(patches) - len(kept_patches)
 
 def write_plist(config: dict, path: Path):
     with open(path, "wb") as f:

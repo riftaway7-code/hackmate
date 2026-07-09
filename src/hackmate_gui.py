@@ -73,9 +73,9 @@ def draw_banner(parent) -> tk.Frame:
 def _get_version() -> str:
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v1.4.2 ({sha})"
+        return f"v1.5.0 ({sha})"
     except Exception:
-        return "v1.4.2"
+        return "v1.5.0"
 
 
 VERSION = _get_version()
@@ -1393,7 +1393,7 @@ class InstallScreen(Screen):
 
             ui(40, "Generating config.plist...")
             log("── Generating config.plist...", "header")
-            macos_major = int(version.version) if version and version.version.isdigit() else 0
+            macos_major = version.major if version else 0
             dual_boot = getattr(self.app, "dual_boot", "")
             config = gen_config(profile, smbios, macos_major, wifi_kext_mode=self.app.wifi_kext_mode, dual_boot=dual_boot)
             if self.app.disable_dgpu:
@@ -1426,9 +1426,13 @@ class InstallScreen(Screen):
                 if result.startswith("ERROR"):
                     log(f"  WARN: {name} — {result}", "warn")
 
+            # Drop kexts that failed to download, then point every surviving entry at
+            # the binary its bundle actually contains.
+            import plistlib
+            from config_gen import sync_executable_paths
+            cfg = plistlib.loads(config_path.read_bytes())
+
             if failed_kexts:
-                import plistlib
-                cfg = plistlib.loads(config_path.read_bytes())
                 before = len(cfg["Kernel"]["Add"])
                 cfg["Kernel"]["Add"] = [
                     k for k in cfg["Kernel"]["Add"]
@@ -1436,8 +1440,13 @@ class InstallScreen(Screen):
                 ]
                 removed = before - len(cfg["Kernel"]["Add"])
                 if removed:
-                    config_path.write_bytes(plistlib.dumps(cfg, fmt=plistlib.FMT_XML))
                     log(f"  Removed {removed} failed kext(s) from config.plist to keep EFI bootable", "warn")
+
+            corrected = sync_executable_paths(cfg, kext_dir)
+            if corrected:
+                log(f"  Corrected ExecutablePath for {len(corrected)} kext(s)", "ok")
+
+            config_path.write_bytes(plistlib.dumps(cfg, fmt=plistlib.FMT_XML))
 
             from kexts import download_heliport, download_usbtoolbox_app
             extras_dir = Path(mount) / "EFI" / "HackMate-Extras"
@@ -1554,15 +1563,20 @@ class InstallScreen(Screen):
                 shutil.rmtree(str(acpi_dir))
                 shutil.copytree(str(ssdt_backup_dir), str(acpi_dir))
 
+            # Drop tables that were never generated, along with any ACPI rename that
+            # pointed at them — an orphaned rename is worse than no patch at all.
             if skip_ssdts or err_ssdts:
                 import plistlib
+                from config_gen import strip_missing_ssdts
                 with open(str(config_path), "rb") as f:
                     cfg = plistlib.load(f)
-                bad = {f"{n}.aml" for n in skip_ssdts + err_ssdts
-                       if not (acpi_dir / f"{n}.aml").exists()}
-                cfg["ACPI"]["Add"] = [e for e in cfg["ACPI"]["Add"] if e.get("Path", "") not in bad]
+                missing = [n for n in skip_ssdts + err_ssdts
+                           if not (acpi_dir / f"{n}.aml").exists()]
+                _, patches_gone = strip_missing_ssdts(cfg, missing)
                 with open(str(config_path), "wb") as f:
                     plistlib.dump(cfg, f)
+                if patches_gone:
+                    log(f"  Removed {patches_gone} ACPI rename(s) left without their SSDT", "info")
 
             for n in ok_ssdts:
                 log(f"  {n}.aml", "ok")

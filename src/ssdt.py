@@ -48,31 +48,32 @@ MANUAL_SSDTS: set[str] = set()
 
 # Double-braces {{ }} are literal braces in the f-string/format output.
 
+# Takes no substitutions, so it is compiled verbatim — single braces only.
 XOSI_DSL_TEMPLATE = """\
 DefinitionBlock ("", "SSDT", 2, "ACDT", "OsIdXosi", 0x00000000)
-{{
+{
     Method (XOSI, 1, NotSerialized)
-    {{
+    {
         If (_OSI ("Darwin"))
-        {{
+        {
             Return (Zero)
-        }}
-        If (Arg0 == "Windows 2009") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2012") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2013") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2015") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2016") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2017") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2017.2") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2018") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2018.2") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2019") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2020") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2021") {{ Return (0xFFFFFFFF) }}
-        If (Arg0 == "Windows 2022") {{ Return (0xFFFFFFFF) }}
+        }
+        If (Arg0 == "Windows 2009") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2012") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2013") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2015") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2016") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2017") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2017.2") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2018") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2018.2") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2019") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2020") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2021") { Return (0xFFFFFFFF) }
+        If (Arg0 == "Windows 2022") { Return (0xFFFFFFFF) }
         Return (_OSI (Arg0))
-    }}
-}}
+    }
+}
 """
 
 GPIO_DSL_TEMPLATE = """\
@@ -221,12 +222,16 @@ DefinitionBlock ("", "SSDT", 2, "CORP", "PMCR", 0x00000000)
 }}
 """
 
+# Pairs with the "GPRW to XGPR" rename in config_gen. The firmware's own GPRW is
+# renamed to XGPR, and this SSDT supplies the GPRW that every _PRW calls: GPE
+# 0x6D (USB) and 0x0D (XHCI) are masked to stop instant wake, and anything else
+# is delegated straight back to the original.
 GPRW_DSL_TEMPLATE = """\
 DefinitionBlock ("", "SSDT", 2, "HACK", "GPRW", 0x00000000)
 {
-    External (GPRW, MethodObj)
+    External (XGPR, MethodObj)
 
-    Method (XPRW, 2, NotSerialized)
+    Method (GPRW, 2, NotSerialized)
     {
         If ((0x6D == Arg0))
         {
@@ -244,7 +249,7 @@ DefinitionBlock ("", "SSDT", 2, "HACK", "GPRW", 0x00000000)
                 Zero
             })
         }
-        Return (GPRW (Arg0, Arg1))
+        Return (XGPR (Arg0, Arg1))
     }
 }
 """
@@ -273,9 +278,10 @@ def _inspect_dsdt(dsdt_path: Path) -> dict:
         data = dsdt_path.read_bytes()
     except Exception:
         return {"has_awac": False, "ec_name": "EC0", "igpu_name": "GFX0",
-                "cpu_path": r"\_SB.PR00", "has_gpi0": False}
+                "cpu_path": r"\_SB.PR00", "has_gpi0": False, "has_gprw": False}
 
     has_awac = b"ACPI000E" in data
+    has_gprw = b"GPRW" in data
 
     ec_name = "EC0"
     for candidate in (b"EC0 ", b"H_EC", b"ECDV", b"EC0_"):
@@ -297,6 +303,7 @@ def _inspect_dsdt(dsdt_path: Path) -> dict:
         "igpu_name": igpu_name,
         "cpu_path":  cpu_path,
         "has_gpi0":  has_gpi0,
+        "has_gprw":  has_gprw,
     }
 
 def _compile_dsl(dsl: str, name: str, acpi_dir: Path, iasl) -> bool:
@@ -415,6 +422,27 @@ def _ensure_ssdttime() -> Path:
     chmod_iasl(SSDTTIME_DIR)
     return script
 
+def _ensure_iasl(script: Optional[Path], ssdttime_dir: Path):
+    """
+    Make sure the iasl compiler is on disk, returning its path or None.
+
+    SSDTTime fetches iasl the first time it starts, but HackMate only launches it
+    when a DSDT was found. On hosts where no DSDT can be read (macOS exposes
+    none), iasl would never arrive and every template compile would fail, so
+    launch SSDTTime once purely to let it bootstrap the compiler.
+    """
+    iasl = find_iasl(ssdttime_dir)
+    if iasl or not script:
+        return iasl
+
+    try:
+        _run(script, "Q\n", timeout=90)
+    except Exception:
+        return None
+
+    chmod_iasl(ssdttime_dir)
+    return find_iasl(ssdttime_dir)
+
 def _parse_menu(output: str) -> dict[str, str]:
     mapping: dict[str, str] = {}
     for line in output.splitlines():
@@ -488,9 +516,15 @@ def generate(
     else:
         cb("  DSDT not found — using generic templates")
         dsdt_info = {"has_awac": False, "ec_name": "EC0", "igpu_name": "GFX0",
-                     "cpu_path": r"\_SB.PR00", "has_gpi0": False}
+                     "cpu_path": r"\_SB.PR00", "has_gpi0": False, "has_gprw": False}
 
     ssdttime_dir = script.parent if script else SSDTTIME_DIR
+
+    iasl = _ensure_iasl(script, ssdttime_dir)
+    if iasl:
+        cb(f"  iasl ready: {iasl.name}")
+    else:
+        cb("  iasl unavailable — falling back to bundled ACPI tables")
 
     menu_map: dict[str, str] = {}
     if script and dsdt:
@@ -518,6 +552,12 @@ def generate(
 
         if ssdt == "SSDT-AWAC" and not dsdt_info.get("has_awac"):
             results[ssdt] = "SKIP: AWAC clock not present in this system — not required"
+            continue
+
+        # Without a GPRW method in the DSDT there is nothing to rename aside,
+        # and no _PRW calls it — the instant-wake fix does not apply.
+        if ssdt == "SSDT-GPRW" and dsdt and not dsdt_info.get("has_gprw"):
+            results[ssdt] = "SKIP: no GPRW method in this DSDT — not required"
             continue
 
         if ssdt in ("SSDT-GPI0", "SSDT-GPIO"):

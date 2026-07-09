@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 _ssdttime/
 macrecovery.py
+.venv/

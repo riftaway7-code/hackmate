@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
+# NOTE: this file must stay parseable and runnable on Python 3.8+.
+# It is the first thing users run, often with the stock system python3
+# (macOS ships 3.9), so it cannot use 3.10+ syntax such as `str | None`.
 import subprocess
 import sys
 import os
 from pathlib import Path
+from typing import Optional
 
 DEPENDENCIES = [
     ("textual", "textual"),
 ]
+
+# hackmate/src uses PEP 604 unions (`X | None`), which need 3.10+ at runtime.
+MIN_PYTHON = (3, 10)
 
 PROJECT_DIR = Path(__file__).parent.resolve()
 VENV_DIR = PROJECT_DIR / ".venv"
@@ -25,16 +32,83 @@ def is_in_venv() -> bool:
     return hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
 
 
-def find_uv() -> str | None:
+def find_uv() -> Optional[str]:
     """Find uv executable."""
     from shutil import which
     return which("uv")
 
 
+def _version_of(python: str) -> Optional[tuple]:
+    """Return (major, minor) for a python executable, or None if it won't run."""
+    try:
+        out = subprocess.run(
+            [python, "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    try:
+        major, minor = out.stdout.split()
+        return (int(major), int(minor))
+    except ValueError:
+        return None
+
+
+def find_modern_python() -> Optional[str]:
+    """
+    Find an interpreter new enough to run HackMate.
+
+    The interpreter running setup.py is often the stock system python3 (3.9 on
+    macOS), which cannot run src/hackmate.py. Building the venv from it would
+    produce a venv that crashes on first launch, so prefer a newer one.
+    """
+    from shutil import which
+
+    if sys.version_info[:2] >= MIN_PYTHON:
+        return sys.executable
+
+    for minor in range(13, MIN_PYTHON[1] - 1, -1):
+        candidate = which(f"python3.{minor}")
+        if candidate and (_version_of(candidate) or (0, 0)) >= MIN_PYTHON:
+            return candidate
+
+    for name in ("python3", "python"):
+        candidate = which(name)
+        if candidate and (_version_of(candidate) or (0, 0)) >= MIN_PYTHON:
+            return candidate
+
+    return None
+
+
+def print_python_too_old(found: str) -> None:
+    want = f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]}"
+    have = f"{sys.version_info[0]}.{sys.version_info[1]}"
+    print(f"ERROR: HackMate needs Python {want} or newer, but only {have} was found.")
+    print(f"       (running as: {found})\n")
+    if sys.platform == "darwin":
+        print("  macOS ships Python 3.9. Install a newer one, then re-run this script:")
+        print("    brew install python@3.12")
+    elif sys.platform == "win32":
+        print("  Install Python from https://python.org/downloads (check 'Add to PATH').")
+    else:
+        print("  Install a newer Python, e.g.:")
+        print("    sudo apt install python3.12 python3.12-venv     # Debian/Ubuntu")
+        print("    sudo dnf install python3.12                     # Fedora")
+    print("\n  Or install 'uv' (picks its own Python automatically):")
+    print("    curl -LsSf https://astral.sh/uv/install.sh | sh")
+
+
 def create_venv_uv(uv: str) -> bool:
-    """Create venv using uv."""
+    """Create venv using uv, pinned to a version that can run HackMate."""
     print(f"Creating virtual environment with uv at {VENV_DIR}...")
-    result = subprocess.run([uv, "venv", str(VENV_DIR)], capture_output=True, text=True)
+    want = f"{MIN_PYTHON[0]}.{MIN_PYTHON[1]}"
+    result = subprocess.run([uv, "venv", "--python", f">={want}", str(VENV_DIR)],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        # Older uv builds don't understand a range specifier — retry without the pin.
+        result = subprocess.run([uv, "venv", str(VENV_DIR)], capture_output=True, text=True)
     if result.returncode != 0:
         print(f"  ERROR: {result.stderr.strip()}")
         return False
@@ -42,10 +116,11 @@ def create_venv_uv(uv: str) -> bool:
     return True
 
 
-def create_venv_stdlib() -> bool:
-    """Create venv using stdlib."""
+def create_venv_stdlib(python: str) -> bool:
+    """Create venv using stdlib, from an interpreter new enough to run HackMate."""
     print(f"Creating virtual environment at {VENV_DIR}...")
-    result = subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)],
+    print(f"  Using {python}")
+    result = subprocess.run([python, "-m", "venv", str(VENV_DIR)],
                             capture_output=True, text=True)
     if result.returncode != 0:
         print(f"  ERROR: {result.stderr.strip()}")
@@ -61,13 +136,13 @@ def get_venv_python() -> str:
     return str(VENV_DIR / "bin" / "python3")
 
 
-def get_venv_pip() -> list[str]:
+def get_venv_pip():
     """Get pip command for venv."""
     python = get_venv_python()
     return [python, "-m", "pip"]
 
 
-def install_deps_uv(uv: str) -> list[str]:
+def install_deps_uv(uv: str):
     """Install dependencies using uv pip."""
     failed = []
     for name, pkg in DEPENDENCIES:
@@ -85,7 +160,7 @@ def install_deps_uv(uv: str) -> list[str]:
     return failed
 
 
-def install_deps_pip() -> list[str]:
+def install_deps_pip():
     """Install dependencies using pip."""
     failed = []
     pip_cmd = get_venv_pip()
@@ -165,7 +240,14 @@ def main():
                 sys.exit(1)
             print_uv_instructions()
         else:
-            if not create_venv_stdlib():
+            # Never build the venv from an interpreter too old to run HackMate —
+            # the venv would inherit that version and crash on first launch.
+            python = find_modern_python()
+            if not python:
+                print()
+                print_python_too_old(sys.executable)
+                sys.exit(1)
+            if not create_venv_stdlib(python):
                 sys.exit(1)
             failed = install_deps_pip()
             print()
@@ -174,7 +256,13 @@ def main():
                 sys.exit(1)
             print_instructions()
     else:
-        # Already in venv, just install
+        # Already in venv — installing deps into a venv too old to run HackMate
+        # would look like success right up until the app fails to start.
+        if sys.version_info[:2] < MIN_PYTHON:
+            print()
+            print_python_too_old(sys.executable)
+            print("\n  This venv is too old. Deactivate it, delete .venv, and re-run setup.py.")
+            sys.exit(1)
         if uv:
             failed = install_deps_uv(uv)
         else:

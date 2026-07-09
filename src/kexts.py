@@ -31,7 +31,6 @@ DB: dict[str, KextEntry] = {
     "NVMeFix":           KextEntry("NVMeFix",         "acidanthera/NVMeFix",          "NVMeFix-",           "NVMe power management + APST"),
     "DebugEnhancer":     KextEntry("DebugEnhancer",   "acidanthera/DebugEnhancer",    "DebugEnhancer-",     "kernel debug logging"),
     "CryptexFixup":      KextEntry("CryptexFixup",    "acidanthera/CryptexFixup",     "CryptexFixup-",      "Ventura+ cryptex on older/AMD hardware"),
-    "AMFIPass":          KextEntry("AMFIPass",        "dortania/AMFIPass",            "AMFIPass-",          "AMFI bypass for post-install patching"),
 
     "FakeSMC_ACPISensors": KextEntry("FakeSMC_ACPISensors", "RehabMan/OS-X-FakeSMC-kozlek", "FakeSMC-",  "ACPI sensors plugin for FakeSMC"),
     "FakeSMC_CPUSensors":  KextEntry("FakeSMC_CPUSensors",  "RehabMan/OS-X-FakeSMC-kozlek", "FakeSMC-",  "CPU sensors plugin for FakeSMC"),
@@ -83,7 +82,7 @@ DB: dict[str, KextEntry] = {
     "BCM5722D":          KextEntry("BCM5722D",         "SavageAUS/BCM5722D",          "BCM5722D-",          "Broadcom BCM5722 Ethernet"),
     "NullEthernet":      KextEntry("NullEthernet",     "RehabMan/OS-X-Null-Ethernet", "NullEthernet-",      "placeholder ethernet for iMessage/iCloud on WiFi-only"),
 
-    "itlwm":             KextEntry("itlwm",            "OpenIntelWireless/itlwm",     "itlwm_",             "Intel WiFi (needs HeliPort app for menu bar)", exe_name="AirportItlwm"),
+    "itlwm":             KextEntry("itlwm",            "OpenIntelWireless/itlwm",     "itlwm_",             "Intel WiFi (needs HeliPort app for menu bar)"),
     "AirportItlwm":      KextEntry("AirportItlwm",     "OpenIntelWireless/itlwm",     "AirportItlwm_",      "Intel WiFi as native AirportBSD (macOS version specific!)"),
     "AirportBrcmFixup":  KextEntry("AirportBrcmFixup", "acidanthera/AirportBrcmFixup","AirportBrcmFixup-",  "Broadcom BCM94352Z/BCM943602CS WiFi patches"),
     "ATH9KFixup":        KextEntry("ATH9KFixup",       "chontos/ATH9KFixup",          "ATH9KFixup-",        "Atheros AR9xxx WiFi patches"),
@@ -101,7 +100,6 @@ DB: dict[str, KextEntry] = {
 
     "NootRX":            KextEntry("NootRX",           "ChefKissInc/NootRX",          "NootRX-",            "AMD RX 6600/6700/6800/6900 (Navi 2x) on Ventura+"),
     "NootedRed":         KextEntry("NootedRed",        "ChefKissInc/NootedRed",       "NootedRed-",         "AMD Renoir/Cezanne/Rembrandt/Phoenix iGPU"),
-    "NootedBlue":        KextEntry("NootedBlue",       "ChefKissInc/NootedBlue",      "NootedBlue-",        "Intel Arc (experimental)"),
     "RadeonSensor":      KextEntry("RadeonSensor",     "aluveitie/RadeonSensor",      "RadeonSensor-",      "AMD GPU temperature monitoring"),
 
     "NullCPUPowerManagement":KextEntry("NullCPUPowerManagement","baservand/NullCPUPowerManagement","NullCPUPowerManagement-","disable AppleIntelCPUPowerManagement (Sandy Bridge and older)"),
@@ -118,10 +116,8 @@ DB: dict[str, KextEntry] = {
     "USBToolBox":        KextEntry("USBToolBox",       "USBToolBox/kext",             "USBToolBox-",        "USB port mapping tool"),
     "UTBMap":            KextEntry("UTBMap",           "",                            "",                   "USB port map (user-generated via USB Mapping after first boot)"),
     "USBInjectAll":      KextEntry("USBInjectAll",     "Sniki/OS-X-USB-Inject-All",   "USBInjectAll-",      "inject all USB ports (use only during mapping, not final EFI)"),
-    "GenericUSBXHCI":    KextEntry("GenericUSBXHCI",   "RattletraPM/GenericUSBXHCI",  "GenericUSBXHCI-",    "AMD USB 3.x controller support"),
     "XHCI-unsupported":  KextEntry("XHCI-unsupported", "RehabMan/OS-X-USB-Inject-All","XHCI-unsupported-",  "unsupported USB 3.0 controllers (Sandy/Ivy Bridge)"),
 
-    "CtlnaAHCIPort":     KextEntry("CtlnaAHCIPort",    "dortania/CtlnaAHCIPort",      "CtlnaAHCIPort-",     "SATA controller support for Big Sur+"),
     "AHCIPortInjector":  KextEntry("AHCIPortInjector", "RehabMan/OS-X-AHCI-Port-Injector","AHCIPortInjector-","inject AHCI ports (very old hardware)"),
     "JMicronATA":        KextEntry("JMicronATA",       "RehabMan/OS-X-JMicron-ATA",   "JMicronATA-",        "JMicron ATA (very old)"),
 
@@ -136,9 +132,6 @@ DB: dict[str, KextEntry] = {
     "AsusSMC":           KextEntry("AsusSMC",          "hieplpvip/AsusSMC",           "AsusSMC-",           "ASUS FN keys, keyboard backlight, fan"),
     "BrightnessKeys":    KextEntry("BrightnessKeys",   "acidanthera/BrightnessKeys",  "BrightnessKeys-",    "brightness Fn keys (F1/F2)"),
     "NoTouchID":         KextEntry("NoTouchID",        "al3xtjames/NoTouchID",        "NoTouchID-",         "suppress Touch ID prompts on non-T2 SMBIOS"),
-
-    "IOElectrify":       KextEntry("IOElectrify",      "Acidanthera/IOElectrify",     "IOElectrify-",       "Thunderbolt hot-plug support"),
-    "ThunderboltReset":  KextEntry("ThunderboltReset", "osy56/ThunderboltReset",      "ThunderboltReset",   "Alpine Ridge TB controller reset on sleep/wake"),
 
     "RealtekCardReader": KextEntry("RealtekCardReader","0xFireWolf/RealtekCardReader", "RealtekCardReader-", "Realtek RTS5xxx SD card reader"),
     "RealtekCardReaderFriend":KextEntry("RealtekCardReaderFriend","0xFireWolf/RealtekCardReaderFriend","RealtekCardReaderFriend-","Lilu plugin companion for RealtekCardReader"),
@@ -249,9 +242,6 @@ def _is_navi2x(profile: HardwareProfile) -> bool:
     return profile.gpu_vendor == "amd" and any(x in name for x in [
         "rx 6600", "rx 6700", "rx 6800", "rx 6900", "navi 21", "navi 22", "navi 23", "navi 24"])
 
-def _is_intel_arc(profile: HardwareProfile) -> bool:
-    return profile.gpu_vendor == "intel" and "arc" in profile.gpu_name.lower()
-
 def _is_hedt(profile: HardwareProfile) -> bool:
     name = profile.cpu_name.lower()
     return any(x in name for x in ["threadripper", "xeon w-", "i9-79", "i9-78", "i7-79", "i7-78"])
@@ -301,11 +291,11 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
     add("FakeSMC" if legacy else "VirtualSMC")
     add("RestrictEvents", "FeatureUnlock")
 
-    # AMD APU uses NootedRed instead of WhateverGreen
+    # AMD APU uses NootedRed instead of WhateverGreen.
+    # Intel Arc has no macOS driver at all, so it just gets WhateverGreen
+    # (harmless no-op) — efi_check warns about the unsupported GPU separately.
     if _is_amd_apu(profile):
         add("NootedRed")
-    elif _is_intel_arc(profile):
-        add("NootedBlue")
     else:
         add("WhateverGreen")
 
@@ -393,16 +383,14 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
     if legacy:
         add("NullCPUPowerManagement")
     if profile.cpu_vendor == "amd":
-        add("AMDRyzenCPUPowerManagement", "AmdTSCSync", "CryptexFixup", "AMFIPass", "GenericUSBXHCI")
+        # Matches Dortania's AMD Vanilla set. AMFIPass (an OCLP root-patching
+        # kext) and GenericUSBXHCI (pre-native-XHCI era) are not part of it.
+        add("AMDRyzenCPUPowerManagement", "AmdTSCSync", "CryptexFixup")
     if _is_hedt(profile):
         add("ForgedInvariant")
 
     if profile.nvme_present:
         add("NVMeFix")
-
-    # CtlnaAHCIPort needed on Big Sur+ for some SATA controllers
-    if profile.cpu_generation <= 7:
-        add("CtlnaAHCIPort")
 
     # USBToolBox.kext enables port discovery; UTBMap.kext is a placeholder the
     # user replaces after running USBToolBox inside macOS (HackMate → USB Mapping)
@@ -542,6 +530,46 @@ def download_heliport(dest: Path, progress_cb=None) -> bool:
     except Exception:
         return False
 
+def check_kext_sources(kexts: list[KextEntry], progress_cb=None) -> tuple[dict[str, str], dict[str, list]]:
+    """
+    Resolve every kext's download before touching the USB.
+
+    A kext whose repo has been renamed or deleted only fails once the build is
+    already underway, and it is then quietly dropped from config.plist — the user
+    finds out when the hardware it drives does not work. Checking first turns
+    that into a warning you can act on. Returns (results, release_cache); pass
+    the cache to download_kexts so releases are not fetched twice.
+    """
+    results: dict[str, str] = {}
+    cache: dict[str, list] = {}
+
+    repos = [k for k in kexts if k.repo]
+    for i, kext in enumerate(repos):
+        if progress_cb:
+            progress_cb(i, len(repos), f"Checking {kext.name}...")
+
+        if kext.repo not in cache:
+            try:
+                release = _get_latest_release(kext.repo)
+            except RuntimeError as e:
+                results[kext.name] = f"ERROR: {e}"
+                continue
+            cache[kext.repo] = release.get("assets", []) if release else []
+
+        assets = cache[kext.repo]
+        if not assets:
+            results[kext.name] = f"ERROR: no downloadable release at github.com/{kext.repo}"
+        elif not _find_asset(assets, kext.asset_pattern):
+            results[kext.name] = f"ERROR: no asset matching '{kext.asset_pattern}' in latest release"
+        else:
+            results[kext.name] = "OK"
+
+    for kext in kexts:
+        results.setdefault(kext.name, "SKIP (user-generated)")
+
+    return results, cache
+
+
 def _kext_valid(kext_path: Path) -> bool:
     return (
         kext_path.is_dir() and
@@ -549,12 +577,15 @@ def _kext_valid(kext_path: Path) -> bool:
         (kext_path / "Contents" / "Info.plist").stat().st_size > 100
     )
 
-def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify: bool = False) -> dict[str, str]:
+def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify: bool = False,
+                   release_cache: dict[str, list] | None = None) -> dict[str, str]:
     dest.mkdir(parents=True, exist_ok=True)
     tmp = dest / "_tmp"
     tmp.mkdir(exist_ok=True)
     results: dict[str, str] = {}
-    seen_repos: dict[str, list] = {}
+    # Reuse releases already resolved by check_kext_sources — the unauthenticated
+    # GitHub API allows only 60 requests an hour.
+    seen_repos: dict[str, list] = dict(release_cache or {})
 
     for i, kext in enumerate(kexts):
         kext_dest = dest / f"{kext.name}.kext"

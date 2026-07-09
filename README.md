@@ -23,7 +23,29 @@ Supports Linux, Windows, and macOS as host operating systems.
 
 ## 📢 Announcements
 
-**v1.3.0 is out** — Windows users can now download a single `HackMate.exe` from the [releases page](https://github.com/riftaway7-code/hackmate/releases) — no Python, no venv, no setup.py. Also fixes AMD config.plist crash, Windows SSL error, and macOS lspci error. Config.plist editor added to welcome screen.
+**v1.5.0 is out** — the biggest correctness release so far. An audit of the whole generation pipeline turned up bugs that produced EFIs which booted but were quietly broken. All are fixed:
+
+- **`setup.py` crashed on macOS.** Stock macOS ships Python 3.9, and setup.py used 3.10-only syntax, so it died before doing anything. It now runs on 3.8+, and builds the venv from a modern interpreter instead of one that cannot launch HackMate.
+- **ACPI renames were applied without the SSDT that made them safe.** On every desktop and every PS/2-only laptop, `_OSI` was renamed to `XOSI` while nothing defined `XOSI` — pointing every firmware `_OSI` call at a method that did not exist. A rename is now only emitted alongside the table supplying its replacement.
+- **The instant-wake fix was backwards.** It renamed each device's `_PRW` and left an `XPRW` method nothing called. It now uses the standard form: `GPRW` → `XGPR`, with SSDT-GPRW supplying the replacement.
+- **Intel WiFi never loaded.** `itlwm.kext` was given another kext's binary name, so OpenCore refused to inject it. `ExecutablePath` is now read from each bundle's own `Info.plist`, which structurally prevents the entire class of bug.
+- **USB port maps were inert.** The map's `ExecutablePath` named a binary that plist-only bundles do not have, and applying a map disabled `USBToolBox.kext` — the driver that reads it.
+- **Laptops loaded two ACPI tables that both defined `_SB.USBX`.**
+
+Also fixed: recovery downloads for five macOS versions shared a cache directory (Big Sur/El Capitan, Monterey/Sierra, …) and could serve the wrong image; MLB board serials were 16 characters instead of 17; kexts were auto-added from GitHub repos that no longer exist; Bluetooth kexts had overlapping version windows; and `iasl` was looked up under the wrong filename, silently disabling SSDT template compilation on every platform.
+
+**New — EFI Health Check.** Point HackMate at any OpenCore EFI, including one you built by hand, and it reports what is actually wrong: orphaned ACPI renames, kexts that will never inject, USB ports that are not really mapped, SIP decoded flag by flag, deprecated kexts, and a missing `-no_compat_check`. It is on the welcome screen, and in the terminal:
+
+```bash
+sudo .venv/bin/python3 src/hackmate.py --doctor            # finds your mounted EFI
+.venv/bin/python3 src/hackmate.py --doctor /Volumes/EFI/EFI
+```
+
+It only reads, and needs no root, so it is safe to run against a booted system.
+
+**New — kext sources are checked before your USB is formatted,** so a dead download source is a warning you can act on instead of a kext that silently goes missing.
+
+**v1.3.0** — Windows users can download a single `HackMate.exe` from the [releases page](https://github.com/riftaway7-code/hackmate/releases) — no Python, no venv, no setup.py. Also fixes AMD config.plist crash, Windows SSL error, and macOS lspci error. Config.plist editor added to welcome screen.
 
 **If you cloned before June 25th (running from `hackmate-linux/`):**
 Just run your usual command — HackMate will auto-migrate itself to the new `src/` layout and relaunch. No manual steps needed.

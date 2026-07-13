@@ -23,7 +23,7 @@ Supports Linux, Windows, and macOS as host operating systems.
 
 ## 📢 Announcements
 
-**v1.5.0 is out** — the biggest correctness release so far. An audit of the whole generation pipeline turned up bugs that produced EFIs which booted but were quietly broken. All are fixed:
+**v2.0.0 is out** — the biggest correctness release so far. An audit of the whole generation pipeline turned up bugs that produced EFIs which booted but were quietly broken. All are fixed:
 
 - **`setup.py` crashed on macOS.** Stock macOS ships Python 3.9, and setup.py used 3.10-only syntax, so it died before doing anything. It now runs on 3.8+, and builds the venv from a modern interpreter instead of one that cannot launch HackMate.
 - **ACPI renames were applied without the SSDT that made them safe.** On every desktop and every PS/2-only laptop, `_OSI` was renamed to `XOSI` while nothing defined `XOSI` — pointing every firmware `_OSI` call at a method that did not exist. A rename is now only emitted alongside the table supplying its replacement.
@@ -32,7 +32,7 @@ Supports Linux, Windows, and macOS as host operating systems.
 - **USB port maps were inert.** The map's `ExecutablePath` named a binary that plist-only bundles do not have, and applying a map disabled `USBToolBox.kext` — the driver that reads it.
 - **Laptops loaded two ACPI tables that both defined `_SB.USBX`.**
 
-Also fixed: recovery downloads for five macOS versions shared a cache directory (Big Sur/El Capitan, Monterey/Sierra, …) and could serve the wrong image; MLB board serials were 16 characters instead of 17; kexts were auto-added from GitHub repos that no longer exist; Bluetooth kexts had overlapping version windows; and `iasl` was looked up under the wrong filename, silently disabling SSDT template compilation on every platform.
+Also fixed: recovery downloads for five macOS versions shared a cache directory (Big Sur/El Capitan, Monterey/Sierra, …) and could serve the wrong image; MLB board serials were 16 characters instead of 17; kexts were auto-added from GitHub repos that no longer exist; Bluetooth kexts had overlapping version windows; `iasl` was looked up under the wrong filename, silently disabling SSDT template compilation on every platform; and Windows Ethernet detection used a deprecated CIM query that could pick up VPN/tunnel adapters instead of the real NIC.
 
 **New — EFI Health Check.** Point HackMate at any OpenCore EFI, including one you built by hand, and it reports what is actually wrong: orphaned ACPI renames, kexts that will never inject, USB ports that are not really mapped, SIP decoded flag by flag, deprecated kexts, and a missing `-no_compat_check`. It is on the welcome screen, and in the terminal:
 

@@ -3043,9 +3043,9 @@ class DemoScreen(Screen):
 def _get_version() -> str:
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v1.5.0 ({sha})"
+        return f"v2.0.0 ({sha})"
     except Exception:
-        return "v1.5.0"
+        return "v2.0.0"
 
 VERSION = _get_version()
 

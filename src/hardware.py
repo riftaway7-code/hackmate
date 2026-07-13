@@ -591,14 +591,12 @@ def _detect_network_linux(profile: HardwareProfile):
                     profile.ethernet_chipset = "ax88"
 
 def _detect_network_windows(profile: HardwareProfile):
-    # Ethernet — Get-CimInstance works on all Windows 10/11 (Get-WmiObject is deprecated on Win11)
+    # Ethernet — -Physical excludes virtual/VPN/tunnel adapters.
     raw = _ps("""
-        $nic = Get-CimInstance Win32_NetworkAdapter | Where-Object {
-            $_.PhysicalAdapter -eq $true -and
-            $_.PNPDeviceID -notlike 'ROOT*' -and
-            $_.Name -notmatch 'Wi-Fi|Wireless|WiFi|802.11|Bluetooth|Virtual|TAP|VPN|Loopback'
+        $nic = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object {
+            $_.InterfaceDescription -notmatch 'Wi-Fi|Wireless|WiFi|802.11|Bluetooth'
         } | Select-Object -First 1
-        $nic.Name
+        $nic.InterfaceDescription
     """)
     profile.ethernet_name = raw.strip()
     name_lower = raw.lower()

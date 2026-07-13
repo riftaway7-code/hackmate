@@ -1,3 +1,4 @@
+import os
 import urllib.request
 import subprocess
 import sys
@@ -117,9 +118,31 @@ def _cached_recovery_files(version: MacOSVersion) -> list[Path]:
     return files
 
 
+def _ensure_cert_bundle_env() -> None:
+    """macrecovery.py (vendored from Acidanthera, re-downloaded fresh at every
+    build — never hand-edit it) calls urlopen() with no SSL context of its
+    own, so it trusts whatever urllib's default HTTPS context resolves to.
+    On some Windows installs — frozen PyInstaller EXEs especially — that
+    default fails to bridge to the system root store and raises
+    CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate
+    partway through the recovery download. Point OpenSSL at certifi's CA
+    bundle via SSL_CERT_FILE, which urllib's default context creation reads
+    at call time, so macrecovery.py picks it up with zero changes to it.
+    """
+    if os.environ.get("SSL_CERT_FILE"):
+        return
+    try:
+        import certifi
+        os.environ["SSL_CERT_FILE"] = certifi.where()
+    except ImportError:
+        pass
+
+
 def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tuple[bool, str]:
     """Download macOS recovery to dest folder. Returns (success, message)."""
     import shutil
+
+    _ensure_cert_bundle_env()
 
     # Use cached files if available
     cached = _cached_recovery_files(version)

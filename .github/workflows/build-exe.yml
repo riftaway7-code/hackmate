@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install textual pyinstaller
+          pip install textual pyinstaller certifi
 
       - name: Write build SHA
         run: |
@@ -44,6 +44,7 @@ jobs:
             --hidden-import efi_check `
             --hidden-import compat `
             --hidden-import oc_log `
+            --hidden-import certifi `
             --hidden-import config_editor `
             --hidden-import tkinter `
             --hidden-import tkinter.filedialog `

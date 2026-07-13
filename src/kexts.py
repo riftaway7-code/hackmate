@@ -412,6 +412,7 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
 def _get_latest_release(repo: str) -> Optional[dict]:
     import ssl
+    import urllib.error
     headers = {"User-Agent": "HackMate/1.0"}
 
     def _fetch(url: str) -> Optional[dict]:
@@ -429,6 +430,23 @@ def _get_latest_release(repo: str) -> Optional[dict]:
                 return data
         except RuntimeError:
             raise
+        except urllib.error.HTTPError as e:
+            # GitHub returns rate-limit/abuse responses as a 403/429 status,
+            # not a 200 with a "rate limit" body — urlopen raises HTTPError
+            # for those before the JSON-parsing branch above ever runs, so
+            # every kext silently came back as a generic connection failure
+            # instead of the real reason. Read the (still JSON) error body.
+            if e.code in (403, 429):
+                try:
+                    body = json.loads(e.read())
+                except Exception:
+                    body = {}
+                if "rate limit" in body.get("message", "").lower() or e.code == 429:
+                    raise RuntimeError(
+                        "GitHub API rate limit exceeded (60 req/hr unauthenticated). "
+                        "Wait ~1 hour and rerun, or set a GITHUB_TOKEN environment variable."
+                    )
+            return None
         except Exception:
             return None
 

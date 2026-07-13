@@ -2101,7 +2101,18 @@ class InstallScreen(Screen):
             dead = [n for n, r in src_results.items() if r.startswith("ERROR")]
             checked = [n for n, r in src_results.items() if not r.startswith("SKIP")]
             if dead and len(dead) == len(checked):
-                log("  Could not reach any kext source — check your internet connection.", "warn")
+                # Every kext failing at once usually isn't a connectivity
+                # problem (recovery already downloaded fine over a totally
+                # separate connection to Apple's CDN) — it's almost always
+                # GitHub's 60 req/hr unauthenticated API limit, which was
+                # previously masked by this exact generic message. Surface
+                # the real reason from the first result instead of guessing.
+                sample = src_results[dead[0]]
+                if "rate limit" in sample.lower():
+                    log(f"  {sample.split('ERROR: ', 1)[-1]}", "warn")
+                else:
+                    log("  Could not reach any kext source — check your internet connection.", "warn")
+                    log(f"  ({sample})", "warn")
             elif dead:
                 for name in dead:
                     log(f"  {name}: {src_results[name]}", "warn")

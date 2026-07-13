@@ -413,7 +413,12 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
     script = (
         f"select disk {disk_num_raw}\n"
         "clean\n"
-        "create partition primary\n"
+        # Windows' built-in FAT32 formatter refuses volumes over 32GB
+        # ("Virtual Disk Service error: The volume size is too big"), so a
+        # bare "create partition primary" on any USB 32GB+ fails outright.
+        # Actual content here is EFI + recovery (~600MB) + kexts, nowhere
+        # near that ceiling — cap the partition well under it.
+        "create partition primary size=4096\n"
         "select partition 1\n"
         "format fs=fat32 quick label=HACKINTOSH\n"
         f"assign letter={mount_letter}\n"

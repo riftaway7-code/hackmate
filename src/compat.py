@@ -390,6 +390,7 @@ def _format_usb_macos(device: str) -> bool:
 def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
     import tempfile
     letter = drive_letter.rstrip(':\\')
+    target_letter = mount_letter.rstrip(':\\')
 
     # diskpart needs disk number, not drive letter — resolve it via PowerShell
     disk_num_raw = _run([
@@ -410,6 +411,23 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
             f"Open Disk Management, format the USB as FAT32, then use the 'Already Formatted' button."
         )
 
+    # target_letter (default Z:) is hardcoded, not queried — if it's already
+    # claimed by another drive (network share, second internal disk, etc.)
+    # diskpart's "assign" silently no-ops instead of erroring, and every
+    # write after this (config.plist, kexts, ...) fails ~30% later with a
+    # confusing "No such file or directory" pointed at a drive letter that
+    # was never actually ours. Catch it here instead, immediately.
+    already_used = _run([
+        "powershell", "-NoProfile", "-Command",
+        f"Test-Path {target_letter}:\\"
+    ]).strip().lower()
+    if already_used == "true":
+        raise RuntimeError(
+            f"Drive letter {target_letter}: is already in use by another drive on this "
+            f"system (network share, another disk, etc). Free it up — disconnect or "
+            f"unmap whatever's using {target_letter}: — then try again."
+        )
+
     script = (
         f"select disk {disk_num_raw}\n"
         "clean\n"
@@ -421,7 +439,7 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
         "create partition primary size=4096\n"
         "select partition 1\n"
         "format fs=fat32 quick label=HACKINTOSH\n"
-        f"assign letter={mount_letter}\n"
+        f"assign letter={target_letter}\n"
         "exit\n"
     )
     script_path = Path(tempfile.mktemp(suffix=".txt"))
@@ -434,6 +452,20 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
         if result.returncode != 0:
             detail = (result.stdout + result.stderr).strip()[-400:]
             raise RuntimeError(f"diskpart failed (code {result.returncode}):\n{detail}")
+
+        # diskpart can report success while "assign" itself quietly no-oped
+        # (e.g. driver hasn't caught up yet) — confirm the letter is really
+        # there before handing back control, instead of failing confusingly
+        # deep into config/kext generation.
+        mounted = _run([
+            "powershell", "-NoProfile", "-Command",
+            f"Test-Path {target_letter}:\\"
+        ]).strip().lower()
+        if mounted != "true":
+            raise RuntimeError(
+                f"USB formatted but {target_letter}: never became accessible afterward. "
+                f"Try unplugging and reconnecting the USB, then use 'Already Formatted'."
+            )
         return True
     finally:
         script_path.unlink(missing_ok=True)

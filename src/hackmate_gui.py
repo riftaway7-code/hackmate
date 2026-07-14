@@ -1325,6 +1325,7 @@ class InstallScreen(Screen):
             self.app.call_from_thread(self._log, msg, level)
 
         import urllib.request
+        import urllib.error
         import zipfile
 
         local_mode = (device == "local")
@@ -1543,8 +1544,17 @@ class InstallScreen(Screen):
                 log("── Downloading OpenCore...", "header")
                 oc_url = "https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
                 req = urllib.request.Request(oc_url, headers={"User-Agent": "HackMate/1.0"})
-                with urllib.request.urlopen(req, timeout=15) as r:
-                    oc_data = json.loads(r.read())
+                try:
+                    with urllib.request.urlopen(req, timeout=15) as r:
+                        oc_data = json.loads(r.read())
+                except urllib.error.HTTPError as e:
+                    if e.code in (403, 429):
+                        raise RuntimeError(
+                            "GitHub API rate limit exceeded (60 req/hr unauthenticated) while "
+                            "downloading OpenCore. Wait ~1 hour and rerun, or set a GITHUB_TOKEN "
+                            "environment variable."
+                        ) from e
+                    raise
 
                 oc_asset = None
                 for asset in oc_data.get("assets", []):

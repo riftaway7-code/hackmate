@@ -926,6 +926,19 @@ class USBScreen(Screen):
             self.app.push_screen(BuildModeScreen, selected)
 
 
+def _expand_user_path(path: str) -> str:
+    """Expand a leading ~ against the real user's home, even under sudo
+    (plain os.path.expanduser would resolve to root's home instead)."""
+    if not path.startswith("~"):
+        return path
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user and sudo_user != "root":
+        import pwd
+        home = pwd.getpwnam(sudo_user).pw_dir
+        return home + path[1:] if path == "~" or path.startswith("~/") else os.path.expanduser(path)
+    return os.path.expanduser(path)
+
+
 class NoUSBPathScreen(Screen):
     """Let the user pick a folder to save the EFI into instead of a USB."""
 
@@ -965,7 +978,7 @@ class NoUSBPathScreen(Screen):
             self._next(path)
 
     def _next(self, path: str) -> None:
-        self.app.efi_output_path = path
+        self.app.efi_output_path = _expand_user_path(path)
         profile: HardwareProfile = self.app.profile
         has_dgpu = getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel"
         if getattr(profile, "wifi_chipset", "") == "intel":

@@ -237,10 +237,24 @@ def _is_amd_apu(profile: HardwareProfile) -> bool:
             and profile.gpu_vendor in ("amd", "")
             and any(x in profile.gpu_name.lower() for x in ["vega", "radeon graphics", "renoir", "cezanne", "rembrandt", "phoenix", "navi"]))
 
+# Navi 21/22/23 (RX 6600-6950 series) PCI device IDs, from pci-ids.ucw.cz.
+# Windows can report just "Advanced Micro Devices, Inc." with no model name
+# when only a generic/inbox driver is loaded (no AMD driver installed) —
+# the device ID still identifies the exact card even when the name doesn't.
+_NAVI2X_DEVICE_IDS = {
+    "73A1", "73A2", "73A3", "73A4", "73A5", "73AB", "73AE", "73AF", "73BF",
+    "73C3", "73C4", "73CE", "73DF",
+    "73E0", "73E1", "73E3", "73E4", "73EF", "73FF",
+}
+
 def _is_navi2x(profile: HardwareProfile) -> bool:
+    if profile.gpu_vendor != "amd":
+        return False
     name = profile.gpu_name.lower()
-    return profile.gpu_vendor == "amd" and any(x in name for x in [
-        "rx 6600", "rx 6700", "rx 6800", "rx 6900", "navi 21", "navi 22", "navi 23", "navi 24"])
+    if any(x in name for x in [
+        "rx 6600", "rx 6700", "rx 6800", "rx 6900", "navi 21", "navi 22", "navi 23", "navi 24"]):
+        return True
+    return profile.gpu_device_id.upper() in _NAVI2X_DEVICE_IDS
 
 def _is_hedt(profile: HardwareProfile) -> bool:
     name = profile.cpu_name.lower()

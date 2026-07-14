@@ -565,9 +565,10 @@ class ScanScreen(Screen):
     def _show_results(self, profile: HardwareProfile):
         kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
         layout = get_alc_layout(profile.audio_codec)
+        gen_suffix = f"  (Gen {profile.cpu_generation})" if profile.cpu_vendor != "amd" else ""
         lines = [
             f"  CPU       {profile.cpu_name}",
-            f"  Codename  {profile.cpu_codename}  (Gen {profile.cpu_generation})",
+            f"  Codename  {profile.cpu_codename}{gen_suffix}",
             f"  Platform  {profile.platform}  —  {profile.oc_platform}",
             f"  GPU       {profile.gpu_name} [{profile.gpu_vendor}]",
             f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}",

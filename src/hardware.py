@@ -596,10 +596,12 @@ def _detect_network_linux(profile: HardwareProfile):
                     profile.ethernet_chipset = "ax88"
 
 def _detect_network_windows(profile: HardwareProfile):
-    # Ethernet — -Physical excludes virtual/VPN/tunnel adapters.
+    # Ethernet — -Physical is not fully reliable: VPN tunnel drivers like
+    # Tailscale's WinTun can still present as a physical adapter to Windows,
+    # so also exclude common tunnel/VPN keywords explicitly.
     raw = _ps("""
         $nic = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object {
-            $_.InterfaceDescription -notmatch 'Wi-Fi|Wireless|WiFi|802.11|Bluetooth'
+            $_.InterfaceDescription -notmatch 'Wi-Fi|Wireless|WiFi|802.11|Bluetooth|Tailscale|WinTun|Wintun|TAP|VPN|Tunnel|Virtual|Loopback'
         } | Select-Object -First 1
         $nic.InterfaceDescription
     """)

@@ -6,6 +6,27 @@ import shlex
 import json
 from pathlib import Path
 
+
+def _enable_windows_vt_mode() -> None:
+    """Legacy conhost.exe (plain cmd.exe / non-Windows-Terminal PowerShell)
+    doesn't interpret ANSI escape codes unless ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    is explicitly turned on for the console — without it, both Textual's
+    output and this file's own raw \\033[...m prints (DEMO_MODE below) show up
+    as literal escape sequences instead of color."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+    except Exception:
+        pass
+
+_enable_windows_vt_mode()
+
 DEMO_MODE = "--demo" in sys.argv
 
 if DEMO_MODE:
@@ -1266,9 +1287,10 @@ class ScanScreen(Screen):
     def _show_results(self, profile: HardwareProfile) -> None:
         kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
         layout = get_alc_layout(profile.audio_codec)
+        gen_suffix = f"  (Gen {profile.cpu_generation})" if profile.cpu_vendor != "amd" else ""
         lines = [
             f"  CPU       {profile.cpu_name}",
-            f"  Codename  {profile.cpu_codename}  (Gen {profile.cpu_generation})",
+            f"  Codename  {profile.cpu_codename}{gen_suffix}",
             f"  Platform  {profile.platform}  —  {profile.oc_platform}",
             f"  GPU       {profile.gpu_name} [{profile.gpu_vendor}]",
             f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}",

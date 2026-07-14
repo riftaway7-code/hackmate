@@ -375,18 +375,48 @@ def _format_usb_linux(device: str, mount_point: str) -> bool:
             f"reassigned to a different device path. Reconnect it and try again."
         )
 
-    # Unmount everything on the disk
     import glob
-    for part in sorted(glob.glob(f"{disk}*")):
-        subprocess.run(["umount", part], capture_output=True)
 
-    _run_checked(["parted", "-s", disk, "mklabel", "gpt"])
-    _run_checked(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"])
-    subprocess.run(["parted", "-s", disk, "set", "1", "esp", "on"], capture_output=True)
-    subprocess.run(["partprobe", disk], capture_output=True)
-    time.sleep(1)
+    def _unmount_all(pattern: str) -> None:
+        # Desktop automounters (udisks2 under GNOME/KDE) watch for partition
+        # table changes and can remount a partition within a fraction of a
+        # second of it appearing — including right after parted creates one,
+        # racing the very next command. A plain umount isn't always enough
+        # if something still has a handle open, so fall back to a lazy
+        # unmount. Confirmed live: repeated failures on the same machine at
+        # both "parted ... mklabel" ("partition(s) are being used") and
+        # "mkfs.fat" ("contains a mounted filesystem").
+        for part in sorted(glob.glob(pattern)):
+            result = subprocess.run(["umount", part], capture_output=True)
+            if result.returncode != 0:
+                subprocess.run(["umount", "-l", part], capture_output=True)
 
-    _run_checked(["mkfs.fat", "-F32", "-n", "HACKINTOSH", part_device])
+    last_err = None
+    for attempt in range(3):
+        try:
+            _unmount_all(f"{disk}*")
+            _run_checked(["parted", "-s", disk, "mklabel", "gpt"])
+            _run_checked(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"])
+            subprocess.run(["parted", "-s", disk, "set", "1", "esp", "on"], capture_output=True)
+            subprocess.run(["partprobe", disk], capture_output=True)
+            time.sleep(1)
+
+            # The new partition may already have been auto-mounted by the
+            # desktop environment the instant it appeared — unmount it
+            # again before formatting.
+            _unmount_all(part_device)
+            _run_checked(["mkfs.fat", "-F32", "-n", "HACKINTOSH", part_device])
+            last_err = None
+            break
+        except RuntimeError as e:
+            last_err = e
+            time.sleep(2)
+    if last_err:
+        raise RuntimeError(
+            f"{last_err}\n\nThe USB kept getting remounted automatically after 3 attempts — "
+            f"your desktop environment's automounter may be racing HackMate. Try unmounting "
+            f"the drive in your file manager first, then retry."
+        )
 
     # Mount
     Path(mount_point).mkdir(parents=True, exist_ok=True)

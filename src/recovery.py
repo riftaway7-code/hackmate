@@ -193,7 +193,12 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
 
                 def write(self, s):
                     self._activity[0] = time.monotonic()
-                    self._pending += s
+                    # macrecovery.py reports download progress with \r (in-place
+                    # refresh), not \n — without this translation those updates
+                    # sit in the buffer until the download fully finishes and
+                    # prints a real newline, so the UI looks frozen at whatever
+                    # percentage it last showed for the whole download.
+                    self._pending += s.replace("\r", "\n")
                     while "\n" in self._pending:
                         line, self._pending = self._pending.split("\n", 1)
                         line = line.strip()

@@ -604,6 +604,19 @@ def get_mount_path(device: str = "", skip_format: bool = False) -> str:
         if skip_format and device:
             letter = device.strip(":\\/").upper()
             if letter and letter.isalpha():
+                # "Already Formatted" assumes the drive is already mounted
+                # with a filesystem — if it's actually RAW (no filesystem at
+                # all), Windows has no path to write to and every later
+                # mkdir/write fails with a raw, confusing WinError instead
+                # of explaining what's actually wrong. Confirmed live: a
+                # user hit "Could not resolve disk number" first (RAW disk),
+                # then tried Already Formatted next and got exactly this.
+                if not os.path.exists(f"{letter}:\\"):
+                    raise RuntimeError(
+                        f"{letter}: isn't accessible — the drive may be RAW (no filesystem) "
+                        f"rather than already formatted. Open Disk Management and format it as "
+                        f"FAT32 first, or use 'Full Build' instead so HackMate formats it for you."
+                    )
                 return f"{letter}:"
         return "Z:"
     if IS_MACOS:

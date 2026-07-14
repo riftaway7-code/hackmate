@@ -2446,7 +2446,25 @@ class InstallScreen(Screen):
 
                 if oc_asset:
                     oc_zip = tmp / oc_asset["name"]
-                    urllib.request.urlretrieve(oc_asset["browser_download_url"], str(oc_zip))
+                    expected_size = oc_asset.get("size", 0)
+                    last_err = None
+                    for attempt in range(3):
+                        try:
+                            oc_req = urllib.request.Request(
+                                oc_asset["browser_download_url"], headers={"User-Agent": "HackMate/1.0"}
+                            )
+                            with urllib.request.urlopen(oc_req, timeout=60) as r:
+                                oc_zip.write_bytes(r.read())
+                            actual_size = oc_zip.stat().st_size
+                            if expected_size and abs(actual_size - expected_size) > 1024:
+                                raise IOError(f"size mismatch (got {actual_size}, expected {expected_size})")
+                            last_err = None
+                            break
+                        except Exception as e:
+                            last_err = e
+                            log(f"  OpenCore download attempt {attempt + 1}/3 failed: {e}", "warn")
+                    if last_err:
+                        raise RuntimeError(f"OpenCore download failed after 3 attempts: {last_err}") from last_err
                     log(f"  Downloaded {oc_asset['name']}", "ok")
 
                     oc_extract = tmp / "oc_extracted"

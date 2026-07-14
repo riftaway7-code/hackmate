@@ -45,6 +45,7 @@ jobs:
             --hidden-import compat `
             --hidden-import oc_log `
             --hidden-import certifi `
+            --hidden-import hwdb_submit `
             --hidden-import config_editor `
             --hidden-import tkinter `
             --hidden-import tkinter.filedialog `

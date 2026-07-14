@@ -391,7 +391,11 @@ class HackMateApp(tk.Tk):
 
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
-        self.push_screen(WelcomeScreen)
+        import hwdb_submit
+        if hwdb_submit.consent_already_asked():
+            self.push_screen(WelcomeScreen)
+        else:
+            self.push_screen(HwdbConsentScreen)
         self.after(3_600_000, self._check_for_update_loop)
 
     # ── navigation ──────────────────────────────────────────────────────
@@ -471,13 +475,59 @@ class HackMateApp(tk.Tk):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+class HwdbConsentScreen(Screen):
+    """Shown once, on first launch. A real no — declining changes nothing
+    else about how HackMate works, it only skips log submission."""
+
+    def on_show(self):
+        wrap = tk.Frame(self, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=30, pady=20)
+        title(wrap, "── Help Improve HackMate? ───────────────────────────────").pack(anchor="w")
+        lines = [
+            "  HackMate can optionally send a short hardware log after",
+            "  each build to github.com/riftaway7-code/hackmate-hwdb —",
+            "  a public, browsable database used to improve compatibility",
+            "  checks and kext selection for real hardware over time.",
+            "",
+            "  What's sent: cpu/gpu/audio/wifi/ethernet chipset, touchpad",
+            "  type, nvme/thunderbolt presence, and whether the build",
+            "  succeeded. Nothing else — no name, no serial number, no",
+            "  file paths, nothing that identifies you personally.",
+            "",
+            "  This is entirely optional. Choosing No changes nothing",
+            "  else — every feature works identically either way. You",
+            "  can change this later from the welcome screen.",
+        ]
+        for line in lines:
+            info(wrap, line).pack(anchor="w", pady=(10, 0) if line.startswith("  What's") or line.startswith("  This") else 0)
+
+        def _choose(consent: bool):
+            import hwdb_submit
+            hwdb_submit.set_consent(consent)
+            self.app.pop_screen()
+            self.app.push_screen(WelcomeScreen)
+
+        btn_row = tk.Frame(wrap, bg=BG)
+        btn_row.pack(anchor="w", pady=(16, 0), fill="x")
+        button(btn_row, "Yes, share build logs", lambda: _choose(True), "primary").pack(fill="x", pady=3, ipady=2)
+        button(btn_row, "No, don't share anything", lambda: _choose(False), "primary").pack(fill="x", pady=3, ipady=2)
+
+
 class WelcomeScreen(Screen):
     def on_show(self):
+        import hwdb_submit
         wrap = tk.Frame(self, bg=BG)
         wrap.place(relx=0.5, rely=0.5, anchor="center")
         draw_banner(wrap).pack(pady=(0, 6))
         tk.Label(wrap, text="Automated OpenCore EFI builder — any hardware",
                  bg=BG, fg=INFOC, font=FONT).pack(pady=(0, 18))
+
+        def _toggle_hwdb():
+            hwdb_submit.set_consent(not hwdb_submit.has_consented())
+            self.app.pop_screen()
+            self.app.push_screen(WelcomeScreen)
+
+        hwdb_label = "Sharing build logs: ON" if hwdb_submit.has_consented() else "Sharing build logs: OFF"
         btns = [
             ("Build EFI",             lambda: self.app.push_screen(ScanScreen), "primary"),
             ("Build EFI (Manual)",    lambda: self.app.push_screen(ManualHardwareScreen), "primary"),
@@ -486,6 +536,7 @@ class WelcomeScreen(Screen):
             ("USB Mapping",           lambda: self.app.push_screen(USBMappingScreen), "primary"),
             ("Edit Config",           lambda: self.app.push_screen(ConfigEditorUSBScreen), "primary"),
             ("Check Logs",            lambda: self.app.push_screen(LogCheckerScreen), "primary"),
+            (hwdb_label,              _toggle_hwdb, "primary"),
             ("Quit",                  self.app.destroy, "danger"),
         ]
         for label, cmd, kind in btns:
@@ -1661,6 +1712,17 @@ class InstallScreen(Screen):
                         self.app.push_screen, BIOSChecklistScreen, version.name, device
                     )
 
+            try:
+                import hwdb_submit
+                feature = "no_usb" if local_mode else ("repair" if repair else ("skip_format" if skip_format else "full"))
+                log_text = hwdb_submit.build_log(
+                    profile, feature, version.name if version else "unknown",
+                    worked="build completed", issues="none", dual_boot=dual_boot,
+                )
+                hwdb_submit.submit_log(profile, feature, log_text, dual_boot=dual_boot)
+            except Exception:
+                pass
+
         except Exception as e:
             ui(0, f"Error: {e}")
             log(f"FATAL: {e}", "error")
@@ -1671,6 +1733,20 @@ class InstallScreen(Screen):
             except Exception:
                 pass
             shutil.rmtree(str(tmp), ignore_errors=True)
+
+            try:
+                import hwdb_submit
+                feature = "no_usb" if locals().get("local_mode") else (
+                    "repair" if locals().get("repair") else (
+                        "skip_format" if locals().get("skip_format") else "full"))
+                v = locals().get("version")
+                log_text = hwdb_submit.build_log(
+                    profile, feature, v.name if v else "unknown",
+                    worked="build failed", issues=str(e), dual_boot=locals().get("dual_boot", ""),
+                )
+                hwdb_submit.submit_log(profile, feature, log_text, dual_boot=locals().get("dual_boot", ""))
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────

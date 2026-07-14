@@ -561,8 +561,50 @@ class USBMappingScreen(Screen):
         except Exception as e:
             self.app.call_from_thread(self.notify, f"Failed: {e}", severity="error")
 
+class HwdbConsentScreen(Screen):
+    """Shown once, on first launch. A real no — declining changes nothing
+    else about how HackMate works, it only skips log submission."""
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Help Improve HackMate? ───────────────────────────────", classes="title"),
+                Static(""),
+                Static("  HackMate can optionally send a short hardware log after", classes="info"),
+                Static("  each build to github.com/riftaway7-code/hackmate-hwdb —", classes="info"),
+                Static("  a public, browsable database used to improve compatibility", classes="info"),
+                Static("  checks and kext selection for real hardware over time.", classes="info"),
+                Static(""),
+                Static("  What's sent: cpu/gpu/audio/wifi/ethernet chipset, touchpad", classes="info"),
+                Static("  type, nvme/thunderbolt presence, and whether the build", classes="info"),
+                Static("  succeeded. Nothing else — no name, no serial number, no", classes="info"),
+                Static("  file paths, nothing that identifies you personally.", classes="info"),
+                Static(""),
+                Static("  This is entirely optional. Choosing No changes nothing", classes="info"),
+                Static("  else — every feature works identically either way. You", classes="info"),
+                Static("  can change this later from the welcome screen.", classes="info"),
+                Static(""),
+                Button("Yes, share build logs", id="consent-yes", classes="primary"),
+                Button("No, don't share anything", id="consent-no", classes="primary"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        import hwdb_submit
+        if event.button.id == "consent-yes":
+            hwdb_submit.set_consent(True)
+        elif event.button.id == "consent-no":
+            hwdb_submit.set_consent(False)
+        self.app.pop_screen()
+        self.app.push_screen(WelcomeScreen())
+
+
 class WelcomeScreen(Screen):
     def compose(self) -> ComposeResult:
+        import hwdb_submit
         yield Header()
         yield Container(
             Horizontal(
@@ -578,6 +620,10 @@ class WelcomeScreen(Screen):
                     Button("USB Mapping",            id="usb_map",    classes="primary"),
                     Button("Edit Config",            id="edit_cfg",   classes="primary"),
                     Button("Check Logs",             id="check_logs", classes="primary"),
+                    Button(
+                        "Sharing build logs: ON" if hwdb_submit.has_consented() else "Sharing build logs: OFF",
+                        id="hwdb_toggle", classes="primary"
+                    ),
                     Button("Quit",                   id="quit",       classes="danger"),
                     id="welcome-inner"
                 ),
@@ -617,6 +663,11 @@ class WelcomeScreen(Screen):
             self.app.push_screen(DiskMapScreen())
         elif event.button.id == "check_logs":
             self.app.push_screen(LogCheckerScreen())
+        elif event.button.id == "hwdb_toggle":
+            import hwdb_submit
+            hwdb_submit.set_consent(not hwdb_submit.has_consented())
+            self.app.pop_screen()
+            self.app.push_screen(WelcomeScreen())
         elif event.button.id == "quit":
             self.app.exit()
 
@@ -735,6 +786,23 @@ class HealthCheckScreen(Screen):
             else:
                 text = f"  [green]No problems found[/green] — {counts['ok']} checks passed"
             self.app.call_from_thread(summary.update, text)
+
+            profile = getattr(self.app, "profile", None)
+            if profile is not None:
+                try:
+                    import hwdb_submit
+                    worked = "build failed" if counts["critical"] else (
+                        "partial" if counts["warn"] else "build completed")
+                    issues = "; ".join(
+                        title for lvl, title, _ in findings if lvl in ("critical", "warn")
+                    ) or "none"
+                    log_text = hwdb_submit.build_log(
+                        profile, "efi_health_check", "n/a (existing EFI audit)",
+                        worked=worked, issues=issues,
+                    )
+                    hwdb_submit.submit_log(profile, "efi_health_check", log_text)
+                except Exception:
+                    pass
 
         except Exception as e:
             self.app.call_from_thread(summary.update, f"  [red]Health check failed: {e}[/red]")
@@ -2538,6 +2606,17 @@ class InstallScreen(Screen):
                         BIOSChecklistScreen(version.name, device)
                     )
 
+            try:
+                import hwdb_submit
+                feature = "no_usb" if local_mode else ("repair" if repair else ("skip_format" if skip_format else "full"))
+                log_text = hwdb_submit.build_log(
+                    profile, feature, version.name if version else "unknown",
+                    worked="build completed", issues="none", dual_boot=dual_boot,
+                )
+                hwdb_submit.submit_log(profile, feature, log_text, dual_boot=dual_boot)
+            except Exception:
+                pass
+
         except Exception as e:
             ui(0, f"Error: {e}")
             log(f"FATAL: {e}", "error")
@@ -2548,6 +2627,20 @@ class InstallScreen(Screen):
             except Exception:
                 pass
             shutil.rmtree(str(tmp), ignore_errors=True)
+
+            try:
+                import hwdb_submit
+                feature = "no_usb" if locals().get("local_mode") else (
+                    "repair" if locals().get("repair") else (
+                        "skip_format" if locals().get("skip_format") else "full"))
+                v = locals().get("version")
+                log_text = hwdb_submit.build_log(
+                    profile, feature, v.name if v else "unknown",
+                    worked="build failed", issues=str(e), dual_boot=locals().get("dual_boot", ""),
+                )
+                hwdb_submit.submit_log(profile, feature, log_text, dual_boot=locals().get("dual_boot", ""))
+            except Exception:
+                pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "back":
@@ -3076,7 +3169,11 @@ class HackMate(App):
         if DEMO_MODE:
             self.push_screen(DemoScreen())
         else:
-            self.push_screen(WelcomeScreen())
+            import hwdb_submit
+            if hwdb_submit.consent_already_asked():
+                self.push_screen(WelcomeScreen())
+            else:
+                self.push_screen(HwdbConsentScreen())
         self.set_interval(3600, self._check_for_update)
 
     @work(thread=True)

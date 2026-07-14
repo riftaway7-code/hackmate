@@ -1,0 +1,6 @@
+name = "hackmate-hwdb-relay"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Secret, not set here — see DEPLOY.md.
+# HWDB_TOKEN = (set via: wrangler secret put HWDB_TOKEN)

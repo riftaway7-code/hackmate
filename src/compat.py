@@ -350,6 +350,13 @@ def format_usb(device: str, mount_point: str) -> bool:
     return _format_usb_linux(device, mount_point)
 
 
+def _run_checked(cmd: list[str]) -> None:
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or result.stdout.strip() or "no error output"
+        raise RuntimeError(f"{' '.join(cmd)} failed: {stderr}")
+
+
 def _format_usb_linux(device: str, mount_point: str) -> bool:
     import re
     import time
@@ -361,19 +368,17 @@ def _format_usb_linux(device: str, mount_point: str) -> bool:
     for part in sorted(glob.glob(f"{disk}*")):
         subprocess.run(["umount", part], capture_output=True)
 
-    subprocess.run(["parted", "-s", disk, "mklabel", "gpt"], check=True, capture_output=True)
-    subprocess.run(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"],
-                   check=True, capture_output=True)
+    _run_checked(["parted", "-s", disk, "mklabel", "gpt"])
+    _run_checked(["parted", "-s", disk, "mkpart", "primary", "fat32", "1MiB", "100%"])
     subprocess.run(["parted", "-s", disk, "set", "1", "esp", "on"], capture_output=True)
     subprocess.run(["partprobe", disk], capture_output=True)
     time.sleep(1)
 
-    subprocess.run(["mkfs.fat", "-F32", "-n", "HACKINTOSH", part_device],
-                   check=True, capture_output=True)
+    _run_checked(["mkfs.fat", "-F32", "-n", "HACKINTOSH", part_device])
 
     # Mount
     Path(mount_point).mkdir(parents=True, exist_ok=True)
-    subprocess.run(["mount", part_device, mount_point], check=True, capture_output=True)
+    _run_checked(["mount", part_device, mount_point])
     return True
 
 

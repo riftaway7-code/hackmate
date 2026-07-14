@@ -684,7 +684,19 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify:
         kext_name = f"{kext.name}.kext"
         bundle = kext.bundle_name or kext.name
         base = bundle.lower()
-        all_kexts = [p for p in extract_dir.rglob("*.kext") if p.is_dir()]
+        # Zips built on macOS (Finder's "Compress", or ditto -c) carry a
+        # parallel __MACOSX/ tree of AppleDouble metadata files whose paths
+        # still include the original ".kext" folder name as a component —
+        # extracting one creates a second, fake "*.kext" directory containing
+        # nothing but junk (no real Contents/Info.plist). Since it shares the
+        # exact same name as the real bundle, an unfiltered search picks
+        # whichever one the filesystem happens to list first — nondeterministic,
+        # and confirmed live via a real EFI health check flagging a kext with
+        # no readable Info.plist.
+        all_kexts = [
+            p for p in extract_dir.rglob("*.kext")
+            if p.is_dir() and "__MACOSX" not in p.parts
+        ]
         found = (
             next((p for p in all_kexts if p.name.lower() == f"{base}.kext"), None) or
             next((p for p in all_kexts if p.name.lower().startswith(base + "_") or p.name.lower().startswith(base + "-")), None) or

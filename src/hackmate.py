@@ -1415,7 +1415,7 @@ class NoUSBPathScreen(Screen):
         self.app.efi_output_path = _expand_user_path(path)
         profile: HardwareProfile = self.app.profile
         has_dgpu = getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel"
-        if getattr(profile, "wifi_chipset", "") == "intel":
+        if getattr(profile, "wifi_chipset", ""):
             self.app.push_screen(WiFiKextScreen("local", repair=False, skip_format=True))
         elif has_dgpu:
             self.app.push_screen(DGPUScreen("local", repair=False, skip_format=True))
@@ -1444,7 +1444,7 @@ class NoUSBPathScreen(Screen):
             self.app.pop_screen()
 
 class WiFiKextScreen(Screen):
-    """WiFi kext selection."""
+    """WiFi/Bluetooth kext selection."""
     def __init__(self, device: str, repair: bool, skip_format: bool):
         super().__init__()
         self.device = device
@@ -1452,11 +1452,15 @@ class WiFiKextScreen(Screen):
         self.skip_format = skip_format
 
     def compose(self) -> ComposeResult:
+        profile: HardwareProfile = self.app.profile
+        is_intel = getattr(profile, "wifi_chipset", "") == "intel"
         yield Header()
-        yield Container(
-            Vertical(
-                Static("── Intel WiFi Mode ──────────────────────────────────────", classes="title"),
-                Static(""),
+        rows = [
+            Static("── WiFi / Bluetooth ─────────────────────────────────────", classes="title"),
+            Static(""),
+        ]
+        if is_intel:
+            rows += [
                 Static("  Standard (itlwm + HeliPort)", classes="info"),
                 Static("    Works with ALL macOS versions including Tahoe.", classes="info"),
                 Static("    Use HeliPort (saved to EFI/HackMate-Extras/) to connect.", classes="info"),
@@ -1467,12 +1471,30 @@ class WiFiKextScreen(Screen):
                 Static("    Shows as built-in WiFi — no HeliPort needed.", classes="info"),
                 Static("    No Tahoe build yet — use for Sonoma or earlier only.", classes="info"),
                 Static(""),
+                Static("  None", classes="info"),
+                Static("    Don't inject any WiFi/BT kexts — use this if you have a", classes="info"),
+                Static("    separate WiFi/BT card or dongle and want the onboard", classes="info"),
+                Static("    radio left completely alone.", classes="info"),
+                Static(""),
                 Button("Standard (itlwm + HeliPort)", id="itlwm",        classes="primary"),
                 Button("Native (AirportItlwm)",        id="airportitlwm", classes="primary"),
-                Button("← Back",                       id="back",         classes="back"),
-                classes="screen-inner"
-            )
-        )
+                Button("None (disable onboard WiFi/BT)", id="none",      classes="primary"),
+            ]
+        else:
+            rows += [
+                Static("  Keep onboard WiFi/BT", classes="info"),
+                Static("    Injects the kexts your detected chipset needs.", classes="info"),
+                Static(""),
+                Static("  None", classes="info"),
+                Static("    Don't inject any WiFi/BT kexts — use this if you have a", classes="info"),
+                Static("    separate WiFi/BT card or dongle and want the onboard", classes="info"),
+                Static("    radio left completely alone.", classes="info"),
+                Static(""),
+                Button("Keep onboard WiFi/BT",           id="auto",      classes="primary"),
+                Button("None (disable onboard WiFi/BT)", id="none",      classes="primary"),
+            ]
+        rows.append(Button("← Back", id="back", classes="back"))
+        yield Container(Vertical(*rows, classes="screen-inner"))
         yield Footer()
 
     def _next(self) -> None:
@@ -1488,6 +1510,12 @@ class WiFiKextScreen(Screen):
             self._next()
         elif event.button.id == "airportitlwm":
             self.app.wifi_kext_mode = "AirportItlwm"
+            self._next()
+        elif event.button.id == "auto":
+            self.app.wifi_kext_mode = "itlwm"  # unused for non-Intel chipsets, kept as the default
+            self._next()
+        elif event.button.id == "none":
+            self.app.wifi_kext_mode = "none"
             self._next()
         elif event.button.id == "back":
             self.app.pop_screen()
@@ -1520,7 +1548,7 @@ class BuildModeScreen(Screen):
     def _next_screen(self, repair: bool, skip_format: bool) -> None:
         profile: HardwareProfile = self.app.profile
         has_dgpu = getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel"
-        if getattr(profile, "wifi_chipset", "") == "intel":
+        if getattr(profile, "wifi_chipset", ""):
             self.app.push_screen(WiFiKextScreen(self.device, repair=repair, skip_format=skip_format))
         elif has_dgpu:
             self.app.push_screen(DGPUScreen(self.device, repair=repair, skip_format=skip_format))

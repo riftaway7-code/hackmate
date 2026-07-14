@@ -364,7 +364,9 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
         add("NullEthernet")
 
     wchip = profile.wifi_chipset
-    if wchip == "intel":
+    if wifi_kext_mode == "none":
+        pass  # user opted to leave onboard WiFi/BT untouched — no kexts injected
+    elif wchip == "intel":
         chosen = "AirportItlwm" if wifi_kext_mode == "AirportItlwm" else "itlwm"
         add(chosen, "IntelBluetoothFirmware", "IntelBTPatcher", "BlueToolFixup")
     elif wchip == "broadcom":

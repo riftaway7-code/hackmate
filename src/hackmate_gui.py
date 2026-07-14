@@ -981,7 +981,7 @@ class NoUSBPathScreen(Screen):
         self.app.efi_output_path = _expand_user_path(path)
         profile: HardwareProfile = self.app.profile
         has_dgpu = getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel"
-        if getattr(profile, "wifi_chipset", "") == "intel":
+        if getattr(profile, "wifi_chipset", ""):
             self.app.push_screen(WiFiKextScreen, "local", False, True)
         elif has_dgpu:
             self.app.push_screen(DGPUScreen, "local", False, True)
@@ -990,7 +990,7 @@ class NoUSBPathScreen(Screen):
 
 
 class WiFiKextScreen(Screen):
-    """WiFi kext selection."""
+    """WiFi/Bluetooth kext selection."""
 
     def __init__(self, app, device: str, repair: bool, skip_format: bool):
         super().__init__(app)
@@ -999,28 +999,52 @@ class WiFiKextScreen(Screen):
         self.skip_format = skip_format
 
     def on_show(self):
+        profile: HardwareProfile = self.app.profile
+        is_intel = getattr(profile, "wifi_chipset", "") == "intel"
         wrap = tk.Frame(self, bg=BG)
         wrap.pack(fill="both", expand=True, padx=30, pady=20)
-        title(wrap, "── Intel WiFi Mode ──────────────────────────────────────").pack(anchor="w")
-        info(wrap, "").pack(anchor="w")
-        for line in [
-            "  Standard (itlwm + HeliPort)",
-            "    Works with ALL macOS versions including Tahoe.",
-            "    Use HeliPort (saved to EFI/HackMate-Extras/) to connect.",
-            "    Note: during the Tahoe installer, use ethernet — itlwm",
-            "    needs HeliPort which cannot run in the recovery env.",
-            "",
-            "  Native AirportBSD (AirportItlwm)",
-            "    Shows as built-in WiFi — no HeliPort needed.",
-            "    No Tahoe build yet — use for Sonoma or earlier only.",
-        ]:
-            info(wrap, line).pack(anchor="w")
+        title(wrap, "── WiFi / Bluetooth ─────────────────────────────────────").pack(anchor="w")
         info(wrap, "").pack(anchor="w")
 
         btn_row = tk.Frame(wrap, bg=BG)
-        btn_row.pack(fill="x", pady=(8, 0))
-        button(btn_row, "Standard (itlwm + HeliPort)", lambda: self._choose("itlwm"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
-        button(btn_row, "Native (AirportItlwm)", lambda: self._choose("AirportItlwm"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
+        if is_intel:
+            for line in [
+                "  Standard (itlwm + HeliPort)",
+                "    Works with ALL macOS versions including Tahoe.",
+                "    Use HeliPort (saved to EFI/HackMate-Extras/) to connect.",
+                "    Note: during the Tahoe installer, use ethernet — itlwm",
+                "    needs HeliPort which cannot run in the recovery env.",
+                "",
+                "  Native AirportBSD (AirportItlwm)",
+                "    Shows as built-in WiFi — no HeliPort needed.",
+                "    No Tahoe build yet — use for Sonoma or earlier only.",
+                "",
+                "  None",
+                "    Don't inject any WiFi/BT kexts — use this if you have a",
+                "    separate WiFi/BT card or dongle and want the onboard",
+                "    radio left completely alone.",
+            ]:
+                info(wrap, line).pack(anchor="w")
+            info(wrap, "").pack(anchor="w")
+            btn_row.pack(fill="x", pady=(8, 0))
+            button(btn_row, "Standard (itlwm + HeliPort)", lambda: self._choose("itlwm"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
+            button(btn_row, "Native (AirportItlwm)", lambda: self._choose("AirportItlwm"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
+            button(btn_row, "None (disable onboard WiFi/BT)", lambda: self._choose("none"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
+        else:
+            for line in [
+                "  Keep onboard WiFi/BT",
+                "    Injects the kexts your detected chipset needs.",
+                "",
+                "  None",
+                "    Don't inject any WiFi/BT kexts — use this if you have a",
+                "    separate WiFi/BT card or dongle and want the onboard",
+                "    radio left completely alone.",
+            ]:
+                info(wrap, line).pack(anchor="w")
+            info(wrap, "").pack(anchor="w")
+            btn_row.pack(fill="x", pady=(8, 0))
+            button(btn_row, "Keep onboard WiFi/BT", lambda: self._choose("itlwm"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
+            button(btn_row, "None (disable onboard WiFi/BT)", lambda: self._choose("none"), "primary").pack(anchor="w", pady=(0, 4), fill="x")
         button(btn_row, "← Back", self.app.pop_screen, "back").pack(anchor="w")
 
     def _choose(self, mode: str):
@@ -1060,7 +1084,7 @@ class BuildModeScreen(Screen):
     def _next(self, repair: bool, skip_format: bool):
         profile: HardwareProfile = self.app.profile
         has_dgpu = getattr(profile, "dgpu_vendor", "") and getattr(profile, "gpu_vendor", "") == "intel"
-        if getattr(profile, "wifi_chipset", "") == "intel":
+        if getattr(profile, "wifi_chipset", ""):
             self.app.push_screen(WiFiKextScreen, self.device, repair, skip_format)
         elif has_dgpu:
             self.app.push_screen(DGPUScreen, self.device, repair, skip_format)

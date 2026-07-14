@@ -363,6 +363,18 @@ def _format_usb_linux(device: str, mount_point: str) -> bool:
     disk = re.sub(r'p?\d+$', '', device) if re.search(r'\d$', device) else device
     part_device = (disk + "p1") if disk[-1].isdigit() else (disk + "1")
 
+    # The device path is resolved once at drive-selection time; if the USB
+    # was unplugged/replugged (or another device changed the kernel's sdX
+    # numbering) before the format step actually runs, `disk` can point at
+    # nothing. parted's own error for that ("Could not stat device ... No
+    # such file or directory") is easy to mistake for something else —
+    # confirmed live from two identical reports for the same machine.
+    if not Path(disk).exists():
+        raise RuntimeError(
+            f"{disk} is no longer present — the USB drive may have been unplugged or "
+            f"reassigned to a different device path. Reconnect it and try again."
+        )
+
     # Unmount everything on the disk
     import glob
     for part in sorted(glob.glob(f"{disk}*")):
@@ -433,7 +445,15 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
             f"unmap whatever's using {target_letter}: — then try again."
         )
 
-    script = (
+    # Split into two diskpart invocations with a short pause between them.
+    # Right after "create partition primary", Windows hasn't always finished
+    # mapping the new partition to a volume object yet — running "format" in
+    # the same script, immediately after, can fail with "There is no volume
+    # selected. Please select a volume and try again." even though the
+    # partition was just created successfully. A brief real-world pause
+    # between partitioning and formatting clears this (confirmed from a
+    # user's full diskpart transcript showing exactly this sequence).
+    create_script = (
         f"select disk {disk_num_raw}\n"
         "clean\n"
         # Windows' built-in FAT32 formatter refuses volumes over 32GB
@@ -442,51 +462,65 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
         # Actual content here is EFI + recovery (~600MB) + kexts, nowhere
         # near that ceiling — cap the partition well under it.
         "create partition primary size=4096\n"
+        "exit\n"
+    )
+    format_script = (
+        f"select disk {disk_num_raw}\n"
         "select partition 1\n"
         "format fs=fat32 quick label=HACKINTOSH\n"
         f"assign letter={target_letter}\n"
         "exit\n"
     )
-    script_path = Path(tempfile.mktemp(suffix=".txt"))
-    script_path.write_text(script)
-    try:
-        # diskpart is notoriously flaky about timing right after a disk is
-        # wiped ("clean") and immediately repartitioned — Windows hasn't
-        # always finished releasing the old volume, which shows up as
-        # ERROR_INVALID_PARAMETER (0x80070057) or ERROR_NO_SUCH_DEVICE
-        # (0x800701b1) even though the disk itself is fine. A short retry
-        # clears most of these instead of failing outright.
-        last_detail = ""
-        for attempt in range(3):
-            result = subprocess.run(
-                ["diskpart", "/s", str(script_path)],
-                capture_output=True, text=True, timeout=120
-            )
-            if result.returncode == 0:
-                break
-            last_detail = (result.stdout + result.stderr).strip()[-400:]
-            if attempt < 2:
-                import time as _time
-                _time.sleep(3)
-        else:
-            raise RuntimeError(f"diskpart failed after 3 attempts:\n{last_detail}")
 
-        # diskpart can report success while "assign" itself quietly no-oped
-        # (e.g. driver hasn't caught up yet) — confirm the letter is really
-        # there before handing back control, instead of failing confusingly
-        # deep into config/kext generation.
-        mounted = _run([
-            "powershell", "-NoProfile", "-Command",
-            f"Test-Path {target_letter}:\\"
-        ]).strip().lower()
-        if mounted != "true":
-            raise RuntimeError(
-                f"USB formatted but {target_letter}: never became accessible afterward. "
-                f"Try unplugging and reconnecting the USB, then use 'Already Formatted'."
-            )
-        return True
-    finally:
-        script_path.unlink(missing_ok=True)
+    def _run_diskpart(script_text: str) -> tuple[int, str]:
+        p = Path(tempfile.mktemp(suffix=".txt"))
+        p.write_text(script_text)
+        try:
+            r = subprocess.run(["diskpart", "/s", str(p)], capture_output=True, text=True, timeout=120)
+            return r.returncode, (r.stdout + r.stderr).strip()[-400:]
+        finally:
+            p.unlink(missing_ok=True)
+
+    # diskpart is notoriously flaky about timing right after a disk is wiped
+    # ("clean") and immediately repartitioned — Windows hasn't always
+    # finished releasing the old volume, which shows up as
+    # ERROR_INVALID_PARAMETER (0x80070057) or ERROR_NO_SUCH_DEVICE
+    # (0x800701b1) even though the disk itself is fine. A short retry
+    # clears most of these instead of failing outright.
+    import time as _time
+    last_detail = ""
+    for attempt in range(3):
+        code, detail = _run_diskpart(create_script)
+        if code != 0:
+            last_detail = detail
+            if attempt < 2:
+                _time.sleep(3)
+            continue
+        _time.sleep(2)  # let Windows map the new partition to a volume before formatting it
+        code, detail = _run_diskpart(format_script)
+        if code == 0:
+            last_detail = ""
+            break
+        last_detail = detail
+        if attempt < 2:
+            _time.sleep(3)
+    else:
+        raise RuntimeError(f"diskpart failed after 3 attempts:\n{last_detail}")
+
+    # diskpart can report success while "assign" itself quietly no-oped
+    # (e.g. driver hasn't caught up yet) — confirm the letter is really
+    # there before handing back control, instead of failing confusingly
+    # deep into config/kext generation.
+    mounted = _run([
+        "powershell", "-NoProfile", "-Command",
+        f"Test-Path {target_letter}:\\"
+    ]).strip().lower()
+    if mounted != "true":
+        raise RuntimeError(
+            f"USB formatted but {target_letter}: never became accessible afterward. "
+            f"Try unplugging and reconnecting the USB, then use 'Already Formatted'."
+        )
+    return True
 
 
 def mount_usb(device: str, mount_point: str) -> bool:

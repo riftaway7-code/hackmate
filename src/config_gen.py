@@ -527,6 +527,12 @@ def _nvram_section(profile: HardwareProfile, layout_id: int, macos_major: int = 
     if macos_major >= 15:
         # Sequoia+: RestrictEvents VMM spoof so macOS doesn't see unsupported Intel hardware
         boot_args.append("revpatch=sbvmm")
+        # Lilu hardcodes a max-supported-kernel-version check per release and
+        # refuses to let ANY of its plugins inject (WhateverGreen, AppleALC,
+        # itlwm, VirtualSMC, ...) on a macOS newer than what that Lilu build
+        # currently whitelists — shows up as generic injection failures like
+        # "Invalid Parameter" on brand-new macOS versions. Bypass the gate.
+        boot_args.append("-lilubetaall")
 
     if profile.cpu_vendor == "amd":
         boot_args.append("npci=0x2000")   # AMD PCI fix

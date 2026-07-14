@@ -426,7 +426,12 @@ def _detect_platform_windows(profile: HardwareProfile):
     chassis = _ps(
         "(Get-WmiObject Win32_SystemEnclosure).ChassisTypes | ForEach-Object { $_ }"
     )
-    laptop_types = {"8", "9", "10", "11", "12", "14", "18", "21"}
+    # DMTF SMBIOS chassis types: 8=Portable, 9=Laptop, 10=Notebook,
+    # 11=Hand Held, 12=Docking Station, 14=Sub Notebook. 18 (Expansion
+    # Chassis) and 21 (Peripheral Chassis) are PCI/bus enclosures, not
+    # laptops — some desktop motherboards misreport one of these,
+    # which was wrongly classifying real desktop towers as laptops.
+    laptop_types = {"8", "9", "10", "11", "12", "14"}
     for t in re.findall(r"\d+", chassis):
         if t in laptop_types:
             profile.platform = "laptop"

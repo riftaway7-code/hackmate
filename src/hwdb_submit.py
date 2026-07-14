@@ -21,10 +21,9 @@ from datetime import date
 
 from hardware import HardwareProfile
 
-# Set after the relay is deployed — see packaging/hwdb_relay/DEPLOY.md.
 # Holds no secret itself; the real GitHub token lives server-side in the
-# relay, never in this client.
-RELAY_URL = ""
+# relay (packaging/hwdb_relay/), never in this client.
+RELAY_URL = "https://hackmate-hwdb-relay.riftaway7.workers.dev"
 
 VERSION = "v2.0.0"
 

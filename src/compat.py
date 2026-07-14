@@ -450,13 +450,26 @@ def _format_usb_windows(drive_letter: str, mount_letter: str = "Z") -> bool:
     script_path = Path(tempfile.mktemp(suffix=".txt"))
     script_path.write_text(script)
     try:
-        result = subprocess.run(
-            ["diskpart", "/s", str(script_path)],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.returncode != 0:
-            detail = (result.stdout + result.stderr).strip()[-400:]
-            raise RuntimeError(f"diskpart failed (code {result.returncode}):\n{detail}")
+        # diskpart is notoriously flaky about timing right after a disk is
+        # wiped ("clean") and immediately repartitioned — Windows hasn't
+        # always finished releasing the old volume, which shows up as
+        # ERROR_INVALID_PARAMETER (0x80070057) or ERROR_NO_SUCH_DEVICE
+        # (0x800701b1) even though the disk itself is fine. A short retry
+        # clears most of these instead of failing outright.
+        last_detail = ""
+        for attempt in range(3):
+            result = subprocess.run(
+                ["diskpart", "/s", str(script_path)],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode == 0:
+                break
+            last_detail = (result.stdout + result.stderr).strip()[-400:]
+            if attempt < 2:
+                import time as _time
+                _time.sleep(3)
+        else:
+            raise RuntimeError(f"diskpart failed after 3 attempts:\n{last_detail}")
 
         # diskpart can report success while "assign" itself quietly no-oped
         # (e.g. driver hasn't caught up yet) — confirm the letter is really

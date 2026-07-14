@@ -2132,6 +2132,9 @@ class InstallScreen(Screen):
 
     @work(thread=True)
     def run_install(self) -> None:
+        from recovery import _ensure_cert_bundle_env
+        _ensure_cert_bundle_env()
+
         profile: HardwareProfile    = self.app.profile
         version: MacOSVersion       = self.app.macos_version
         device: str                 = self.device

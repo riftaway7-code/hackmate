@@ -1309,6 +1309,9 @@ class InstallScreen(Screen):
         self.cmd_log.write(f"  {line}", "cmd_err" if is_err else "cmd_out")
 
     def run_install(self):
+        from recovery import _ensure_cert_bundle_env
+        _ensure_cert_bundle_env()
+
         profile: HardwareProfile = self.app.profile
         version: MacOSVersion = self.app.macos_version
         device: str = self.device

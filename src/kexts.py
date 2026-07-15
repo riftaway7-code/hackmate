@@ -543,7 +543,17 @@ def download_heliport(dest: Path, progress_cb=None) -> bool:
     """Download HeliPort.app (needed with itlwm) into dest/HeliPort.app.zip."""
     if progress_cb:
         progress_cb("Downloading HeliPort.app...")
-    release = _get_latest_release("OpenIntelWireless/HeliPort")
+    try:
+        release = _get_latest_release("OpenIntelWireless/HeliPort")
+    except RuntimeError as e:
+        # _get_latest_release deliberately re-raises rate-limit errors so
+        # callers can show a clean message — every other kext download
+        # already catches this, this one was missed, so a rate limit here
+        # crashed the whole build with a raw traceback instead of just
+        # marking HeliPort as failed like everything around it.
+        if progress_cb:
+            progress_cb(f"HeliPort download failed: {e}")
+        return False
     if not release:
         return False
     assets = release.get("assets", [])

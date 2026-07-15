@@ -1344,7 +1344,13 @@ class InstallScreen(Screen):
         skip_format: bool = self.skip_format
         tmp = Path(get_tmp_dir())
         tmp.mkdir(parents=True, exist_ok=True)
-        mount = get_mount_path(device, skip_format=skip_format)
+        # Repair mode doesn't reformat the drive, so it needs the drive's
+        # actual current letter just like Already Formatted does — only a
+        # fresh Full Build can assume the fixed "Z:" HackMate itself assigns
+        # during formatting. Without this, repair always assumed Z: even
+        # when Windows had mounted the drive somewhere else, and failed with
+        # a raw WinError pointing at a drive letter nothing was ever on.
+        mount = get_mount_path(device, skip_format=(skip_format or repair))
 
         def ui(pct, msg):
             self.app.call_from_thread(self._status, pct, msg)
@@ -1385,10 +1391,16 @@ class InstallScreen(Screen):
                     backup_dir.mkdir(parents=True, exist_ok=True)
                     backup_zip = backup_dir / f"EFI_backup_{ts}.zip"
                     file_count = 0
+                    # Python 3.12 tightened relative_to()'s matching: the bare
+                    # drive string "Z:" isn't treated as the same anchor as
+                    # the rooted "Z:\EFI\..." paths rglob() returns, and
+                    # raises "is not in the subpath of" even though it's
+                    # obviously the same drive. Root it the same way.
+                    mount_root = Path(f"{mount}\\") if IS_WINDOWS else Path(f"{mount}")
                     with zf.ZipFile(backup_zip, "w", zf.ZIP_DEFLATED) as z:
                         for f in existing_efi.rglob("*"):
                             if f.is_file():
-                                z.write(f, f.relative_to(mount))
+                                z.write(f, f.relative_to(mount_root))
                                 file_count += 1
                     size_mb = backup_zip.stat().st_size / 1024 / 1024
                     log(f"── EFI backed up: {file_count} files, {size_mb:.1f} MB → {backup_zip}", "ok")

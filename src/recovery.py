@@ -185,6 +185,8 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
             # line-by-line as it's written rather than buffering until completion.
             import runpy, io, threading, time
 
+            last_lines: list[str] = []
+
             class _LiveStream(io.TextIOBase):
                 def __init__(self, cb, activity):
                     self._cb = cb
@@ -202,8 +204,11 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
                     while "\n" in self._pending:
                         line, self._pending = self._pending.split("\n", 1)
                         line = line.strip()
-                        if line and self._cb:
-                            self._cb(line)
+                        if line:
+                            last_lines.append(line)
+                            del last_lines[:-5]
+                            if self._cb:
+                                self._cb(line)
                     return len(s)
 
                 def flush(self):
@@ -239,7 +244,8 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
             if "error" in result:
                 return False, f"Download failed: {result['error']}"
             if result.get("exit_code", 0) != 0:
-                return False, f"macrecovery exited with code {result['exit_code']}"
+                detail = " | ".join(last_lines) if last_lines else "no output captured"
+                return False, f"macrecovery exited with code {result['exit_code']}: {detail}"
         else:
             import threading, time, queue as _queue
 
@@ -260,6 +266,7 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
             threading.Thread(target=_reader, daemon=True).start()
 
             last_msg = ""
+            last_lines: list[str] = []
             while True:
                 try:
                     line = line_q.get(timeout=STALL_TIMEOUT)
@@ -274,11 +281,14 @@ def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tu
                 line = line.strip()
                 if line and line != last_msg:
                     last_msg = line
+                    last_lines.append(line)
+                    del last_lines[:-5]
                     if progress_cb:
                         progress_cb(line)
             proc.wait()
             if proc.returncode != 0:
-                return False, f"macrecovery exited with code {proc.returncode}"
+                detail = " | ".join(last_lines) if last_lines else "no output captured"
+                return False, f"macrecovery exited with code {proc.returncode}: {detail}"
     except Exception as e:
         return False, f"Download failed: {e}"
 

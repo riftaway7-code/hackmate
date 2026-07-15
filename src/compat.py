@@ -351,7 +351,14 @@ def format_usb(device: str, mount_point: str) -> bool:
 
 
 def _run_checked(cmd: list[str]) -> None:
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"'{cmd[0]}' isn't installed. Install it with your distro's package "
+            f"manager (e.g. `sudo apt install parted dosfstools` on Debian/Ubuntu) "
+            f"and try again."
+        )
     if result.returncode != 0:
         stderr = result.stderr.strip() or result.stdout.strip() or "no error output"
         raise RuntimeError(f"{' '.join(cmd)} failed: {stderr}")
@@ -418,9 +425,20 @@ def _format_usb_linux(device: str, mount_point: str) -> bool:
             f"the drive in your file manager first, then retry."
         )
 
-    # Mount
+    # mkfs.fat's writes may not be fully flushed to the block device yet on
+    # slower drives — mounting immediately after can see a stale/incomplete
+    # superblock ("wrong fs type, bad superblock" from mount) even though
+    # the filesystem was actually created correctly. sync() plus a short
+    # pause, with one retry, clears this.
+    subprocess.run(["sync"], capture_output=True)
+    time.sleep(1)
+
     Path(mount_point).mkdir(parents=True, exist_ok=True)
-    _run_checked(["mount", part_device, mount_point])
+    try:
+        _run_checked(["mount", part_device, mount_point])
+    except RuntimeError:
+        time.sleep(2)
+        _run_checked(["mount", part_device, mount_point])
     return True
 
 

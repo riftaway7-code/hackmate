@@ -632,6 +632,25 @@ def _detect_network_windows(profile: HardwareProfile):
     elif "realtek" in name_lower: profile.wifi_chipset = "realtek"
     elif "mediatek" in name_lower: profile.wifi_chipset = "mediatek"
 
+    if not profile.wifi_chipset:
+        # Win32_NetworkAdapter only lists a WiFi card by its friendly name if
+        # a driver is actually bound. Newer Intel WiFi 6/6E chips (AX200,
+        # AX201, AX210/AX1675, AX211) often have no inbox driver on a fresh
+        # Windows install set up just to run HackMate, so Windows shows
+        # them as an unclassified "Network controller" with nothing to match
+        # against by name at all. Fall back to the raw PCI hardware ID
+        # (from pci-ids.ucw.cz), which Windows exposes even undriven.
+        intel_wifi_ids = "0070|0074|4070|2723|2725|0094"
+        raw_pnp = _ps(f"""
+            (Get-PnpDevice -PresentOnly | Where-Object {{
+                $_.InstanceId -match 'PCI\\\\VEN_8086&DEV_({intel_wifi_ids})'
+            }} | Select-Object -First 1).InstanceId
+        """)
+        if raw_pnp.strip():
+            profile.wifi_chipset = "intel"
+            if not profile.wifi_name:
+                profile.wifi_name = "Intel WiFi (no driver installed)"
+
 def detect_smbios(profile: HardwareProfile):
     key = (profile.cpu_generation, profile.platform)
     if key in SMBIOS_MAP:

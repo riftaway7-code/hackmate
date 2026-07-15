@@ -195,13 +195,30 @@ def detect_touchpad_type() -> str:
     """Returns 'ps2', 'i2c', or 'none'"""
     if IS_WINDOWS:
         try:
+            # Windows never puts "I2C" in a touchpad's FriendlyName — it's a
+            # bus protocol, not something exposed to the UI. Real I2C HID
+            # touchpads show up as a generic "HID-compliant touch pad" or a
+            # bare vendor name (ELAN, Synaptics), with no I2C indication at
+            # all, so searching for a literal "i2c" substring essentially
+            # never matches on any real machine. I2C HID devices are
+            # ACPI-enumerated (standard Windows HID-over-I2C architecture),
+            # unlike USB or PS/2 pointing devices — that's the reliable
+            # signal to check instead.
+            i2c_hit = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "if (Get-PnpDevice -Class HIDClass -PresentOnly | Where-Object { "
+                 "$_.InstanceId -like 'ACPI\\*' -and $_.FriendlyName -match 'touch|pad' "
+                 "}) { 'i2c' }"],
+                capture_output=True, text=True, timeout=8
+            ).stdout.strip()
+            if i2c_hit == "i2c":
+                return "i2c"
+
             raw = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
                  "Get-PnpDevice | Where-Object {$_.Class -eq 'HIDClass' -or $_.Class -eq 'Mouse'} | Select-Object -ExpandProperty FriendlyName"],
                 capture_output=True, text=True, timeout=8
             ).stdout.lower()
-            if "i2c" in raw:
-                return "i2c"
             if "ps/2" in raw or "synaptics" in raw or "alps" in raw or "elantech" in raw:
                 return "ps2"
             return "none"
@@ -300,6 +317,19 @@ def _get_usb_drives_windows() -> list[tuple[str, str, str]]:
         if isinstance(disks, dict):
             disks = [disks]
         usb_disk_numbers = {str(d.get("Number", "")): d.get("Size", 0) for d in disks}
+
+        # A GPT USB stick with an EFI System Partition — exactly what a
+        # previous OpenCore/HackMate attempt leaves behind — never gets a
+        # drive letter from Windows; ESPs are hidden from letter assignment
+        # by design. Without this, such a stick is invisible to HackMate
+        # entirely, no matter how many times it's reconnected. Assign one
+        # before enumerating so it actually shows up.
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-Partition | Where-Object { -not $_.DriveLetter -and $_.DiskNumber -in @(" +
+             ",".join(usb_disk_numbers.keys()) + ") } | Add-PartitionAccessPath -AssignDriveLetter -ErrorAction SilentlyContinue"],
+            capture_output=True, timeout=10
+        )
 
         out_part = subprocess.run(
             ["powershell", "-NoProfile", "-Command",

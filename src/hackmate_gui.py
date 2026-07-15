@@ -1523,7 +1523,8 @@ class InstallScreen(Screen):
                 self.app.call_from_thread(self._status, pct, msg)
                 self.app.call_from_thread(self._log, f"  [{i+1}/{n}] {msg}", "info")
 
-            results = download_kexts(kexts, kext_dir, progress_cb=kext_progress, verify=repair)
+            results = download_kexts(kexts, kext_dir, progress_cb=kext_progress, verify=repair,
+                                    macos_version=version.version)
             ok_count = sum(1 for v in results.values() if v.startswith("OK"))
             log(f"  {ok_count} kexts downloaded successfully", "ok")
             failed_kexts = {name for name, res in results.items() if res.startswith("ERROR")}

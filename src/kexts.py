@@ -611,8 +611,25 @@ def _kext_valid(kext_path: Path) -> bool:
         (kext_path / "Contents" / "Info.plist").stat().st_size > 100
     )
 
+# AirportItlwm ships a separate release asset per macOS version (its kext
+# binary is not forward/backward compatible across major versions) — unlike
+# every other kext here, matching just "AirportItlwm_" picks whichever one
+# happens to sort first among all of them, not the one for the macOS the
+# user actually selected. Confirmed live: a user targeting Monterey got a
+# kext that failed to prelink, fixed only by manually grabbing the
+# Monterey-specific build themselves.
+_AIRPORTITLWM_KEYWORDS = {
+    "10.13": "highsierra",
+    "10.14": "mojave",
+    "10.15": "catalina",
+    "11": "bigsur",
+    "12": "monterey",
+    "13": "ventura",
+    "14": "sonoma",
+}
+
 def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify: bool = False,
-                   release_cache: dict[str, list] | None = None) -> dict[str, str]:
+                   release_cache: dict[str, list] | None = None, macos_version: str = "") -> dict[str, str]:
     dest.mkdir(parents=True, exist_ok=True)
     tmp = dest / "_tmp"
     tmp.mkdir(exist_ok=True)
@@ -651,10 +668,32 @@ def download_kexts(kexts: list[KextEntry], dest: Path, progress_cb=None, verify:
             assets = release.get("assets", [])
             seen_repos[kext.repo] = assets
 
-        asset = _find_asset(assets, kext.asset_pattern)
-        if not asset:
-            results[kext.name] = f"ERROR: no asset matching '{kext.asset_pattern}'"
-            continue
+        if kext.name == "AirportItlwm":
+            keyword = _AIRPORTITLWM_KEYWORDS.get(macos_version, "")
+            if not keyword:
+                results[kext.name] = (
+                    f"ERROR: AirportItlwm has no build for macOS {macos_version or 'this version'} "
+                    f"— use Standard (itlwm) WiFi mode instead"
+                )
+                continue
+            asset = next(
+                (a for a in assets
+                 if kext.asset_pattern.lower() in a["name"].lower()
+                 and keyword in a["name"].lower()
+                 and a["name"].lower().endswith(".zip")),
+                None,
+            )
+            if not asset:
+                results[kext.name] = (
+                    f"ERROR: no AirportItlwm build found for macOS {macos_version} "
+                    f"— use Standard (itlwm) WiFi mode instead"
+                )
+                continue
+        else:
+            asset = _find_asset(assets, kext.asset_pattern)
+            if not asset:
+                results[kext.name] = f"ERROR: no asset matching '{kext.asset_pattern}'"
+                continue
 
         zip_path = tmp / asset["name"]
         try:

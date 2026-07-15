@@ -2740,9 +2740,18 @@ class InstallScreen(Screen):
                     "repair" if locals().get("repair") else (
                         "skip_format" if locals().get("skip_format") else "full"))
                 v = locals().get("version")
+                # str(e) alone loses all location info — a bare message like
+                # "unsupported operand type(s) for +: 'NoneType' and 'str'"
+                # is undebuggable without knowing where it happened. Append
+                # the failing frame (file:line + the actual source line).
+                issues = str(e)
+                tb = traceback.extract_tb(e.__traceback__)
+                if tb:
+                    last = tb[-1]
+                    issues = f"{e} (at {Path(last.filename).name}:{last.lineno} in {last.name}: {last.line})"
                 log_text = hwdb_submit.build_log(
                     profile, feature, v.name if v else "unknown",
-                    worked="build failed", issues=str(e), dual_boot=locals().get("dual_boot", ""),
+                    worked="build failed", issues=issues, dual_boot=locals().get("dual_boot", ""),
                 )
                 hwdb_submit.submit_log(profile, feature, log_text, dual_boot=locals().get("dual_boot", ""))
             except Exception:

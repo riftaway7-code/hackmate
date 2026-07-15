@@ -447,13 +447,28 @@ def _format_usb_linux(device: str, mount_point: str) -> bool:
             break
         except RuntimeError as e:
             last_err = e
+            # A missing tool (e.g. parted not installed) fails identically
+            # on every attempt and retrying can't fix it — stop immediately
+            # instead of wasting time and 3 retries on something retrying
+            # will never solve.
+            if "isn't installed" in str(e):
+                break
             time.sleep(2)
     if last_err:
-        raise RuntimeError(
-            f"{last_err}\n\nThe USB kept getting remounted automatically after 3 attempts — "
-            f"your desktop environment's automounter may be racing HackMate. Try unmounting "
-            f"the drive in your file manager first, then retry."
-        )
+        # Only blame the automounter race when the error actually looks like
+        # one — appending that explanation to an unrelated failure (like a
+        # missing tool) is actively misleading. Confirmed live: a "parted
+        # isn't installed" error got a nonsensical "kept getting remounted
+        # automatically" explanation tacked onto it.
+        is_mount_race = any(s in str(last_err).lower() for s in
+                             ("mounted", "busy", "being used", "no volume"))
+        if is_mount_race:
+            raise RuntimeError(
+                f"{last_err}\n\nThe USB kept getting remounted automatically after 3 attempts — "
+                f"your desktop environment's automounter may be racing HackMate. Try unmounting "
+                f"the drive in your file manager first, then retry."
+            )
+        raise RuntimeError(str(last_err))
 
     # mkfs.fat's writes may not be fully flushed to the block device yet on
     # slower drives — mounting immediately after can see a stale/incomplete

@@ -25,7 +25,18 @@ from hardware import HardwareProfile
 # relay (packaging/hwdb_relay/), never in this client.
 RELAY_URL = "https://hackmate-hwdb-relay.riftaway7.workers.dev"
 
-VERSION = "v2.0.0"
+def _get_version() -> str:
+    # Mirrors hackmate.py/hackmate_gui.py's _get_version() — .release_tag is
+    # written at build time from the actual GitHub release tag. This used
+    # to be a hardcoded "v2.0.0" literal, so every hwdb submission ever made
+    # claimed "v2.0.0" regardless of what was actually running, making it
+    # impossible to tell pre-fix from post-fix reports from the data alone.
+    try:
+        return (Path(__file__).parent / ".release_tag").read_text().strip() or "dev"
+    except Exception:
+        return "dev"
+
+VERSION = _get_version()
 
 
 def _real_home() -> Path:

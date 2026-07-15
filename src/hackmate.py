@@ -3251,11 +3251,22 @@ class DemoScreen(Screen):
         self.app.call_from_thread(self.app.exit)
 
 def _get_version() -> str:
+    # .release_tag is written at build time from the actual GitHub release
+    # tag (falls back to "dev" for manual/local runs). Previously this was
+    # a hardcoded "v2.0.0" literal that never changed across releases, so
+    # every build — v2.0.1, v2.0.2, whatever's shipped since — displayed
+    # the same wrong version, and every hwdb submission inherited the same
+    # stale value, making it impossible to tell pre-fix from post-fix
+    # reports from the data alone.
+    try:
+        tag = (Path(__file__).parent / ".release_tag").read_text().strip() or "dev"
+    except Exception:
+        tag = "dev"
     try:
         sha = (Path(__file__).parent / ".version").read_text().strip()[:7]
-        return f"v2.0.0 ({sha})"
+        return f"{tag} ({sha})"
     except Exception:
-        return "v2.0.0"
+        return tag
 
 VERSION = _get_version()
 

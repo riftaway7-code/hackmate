@@ -14,6 +14,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -26,6 +28,16 @@ jobs:
       - name: Write build SHA
         run: |
           "${{ github.sha }}" | Out-File -FilePath src\.version -Encoding utf8 -NoNewline
+
+      - name: Write release tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          if ([string]::IsNullOrEmpty($tag)) {
+            $tag = git describe --tags --abbrev=0 2>$null
+            if ([string]::IsNullOrEmpty($tag)) { $tag = "dev" }
+          }
+          $tag | Out-File -FilePath src\.release_tag -Encoding utf8 -NoNewline
 
       - name: Download macrecovery.py
         run: |
@@ -50,6 +62,7 @@ jobs:
             --hidden-import tkinter `
             --hidden-import tkinter.filedialog `
             --add-data "src\.version;." `
+            --add-data "src\.release_tag;." `
             --add-data "src\macrecovery.py;." `
             src/hackmate.py
 

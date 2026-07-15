@@ -139,7 +139,23 @@ def _ensure_cert_bundle_env() -> None:
 
 
 def download_recovery(version: MacOSVersion, dest: Path, progress_cb=None) -> tuple[bool, str]:
-    """Download macOS recovery to dest folder. Returns (success, message)."""
+    """Download macOS recovery to dest folder, retrying transient failures.
+    Returns (success, message)."""
+    last_result = (False, "")
+    for attempt in range(3):
+        ok, msg = _download_recovery_once(version, dest, progress_cb=progress_cb)
+        if ok:
+            return ok, msg
+        last_result = (ok, msg)
+        if attempt < 2:
+            if progress_cb:
+                progress_cb(f"Retrying download (attempt {attempt + 2}/3)...")
+            import time
+            time.sleep(3)
+    return last_result
+
+
+def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None) -> tuple[bool, str]:
     import shutil
 
     _ensure_cert_bundle_env()

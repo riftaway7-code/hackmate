@@ -661,6 +661,24 @@ def unmount_usb(mount_point: str) -> bool:
     return True
 
 
+def _find_free_drive_letter() -> str:
+    """Which drive letters are already taken varies per machine — Z: is
+    frequently claimed by a VPN network share, a mapped drive, or a second
+    disk. Hardcoding Z: as the target meant anyone with something already
+    on it had to manually go free it up before HackMate could even start
+    (seen repeatedly in the wild: 'Drive letter Z: is already in use').
+    Scan for a letter that's actually free instead."""
+    used_raw = _run([
+        "powershell", "-NoProfile", "-Command",
+        "[System.IO.DriveInfo]::GetDrives() | ForEach-Object { $_.Name.Substring(0,1).ToUpper() }"
+    ])
+    used = set(used_raw.split())
+    for letter in "ZYXWVUTSRQPONMLKJIHGFED":
+        if letter not in used:
+            return f"{letter}:"
+    raise RuntimeError("No free drive letters available — free one up and try again.")
+
+
 def get_mount_path(device: str = "", skip_format: bool = False) -> str:
     """Get the mount path for the USB drive."""
     if IS_WINDOWS:
@@ -681,7 +699,7 @@ def get_mount_path(device: str = "", skip_format: bool = False) -> str:
                         f"FAT32 first, or use 'Full Build' instead so HackMate formats it for you."
                     )
                 return f"{letter}:"
-        return "Z:"
+        return _find_free_drive_letter()
     if IS_MACOS:
         return "/Volumes/HACKINTOSH"
     return "/tmp/hackmate_usb"

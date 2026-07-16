@@ -1,3 +1,4 @@
+import os
 import urllib.request
 import json
 import zipfile
@@ -426,10 +427,22 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     return selected
 
+def _github_headers() -> dict:
+    """Unauthenticated GitHub API calls are capped at 60 req/hr, which every
+    kext download eats into individually — a handful of reruns in the same
+    hour is enough to trip it. GITHUB_TOKEN raises that to 5000 req/hr, but
+    nothing ever actually sent it despite the rate-limit error telling users
+    to set it. Wire it up if present."""
+    headers = {"User-Agent": "HackMate/1.0"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
 def _get_latest_release(repo: str) -> Optional[dict]:
     import ssl
     import urllib.error
-    headers = {"User-Agent": "HackMate/1.0"}
+    headers = _github_headers()
 
     def _fetch(url: str) -> Optional[dict]:
         ctx = ssl.create_default_context()
@@ -497,7 +510,7 @@ def download_usbtoolbox_app(dest: Path, progress_cb=None) -> bool:
         progress_cb("Downloading USBToolBox app...")
     import ssl as _ssl
     ctx = _ssl.create_default_context()
-    headers = {"User-Agent": "HackMate/1.0"}
+    headers = _github_headers()
 
     # Find latest release that has a macOS or Windows asset
     releases_raw = None

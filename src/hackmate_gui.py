@@ -1595,7 +1595,11 @@ class InstallScreen(Screen):
                 ui(82, "Downloading OpenCore...")
                 log("── Downloading OpenCore...", "header")
                 oc_url = "https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
-                req = urllib.request.Request(oc_url, headers={"User-Agent": "HackMate/1.0"})
+                oc_headers = {"User-Agent": "HackMate/1.0"}
+                oc_token = os.environ.get("GITHUB_TOKEN")
+                if oc_token:
+                    oc_headers["Authorization"] = f"Bearer {oc_token}"
+                req = urllib.request.Request(oc_url, headers=oc_headers)
                 try:
                     with urllib.request.urlopen(req, timeout=15) as r:
                         oc_data = json.loads(r.read())

@@ -170,3 +170,11 @@ HackMate is free and open source. If it saved you hours of config.plist hell, co
 - Uses the same tools recommended by the Dortania guide (macrecovery, SSDTTime, OpenCore)
 - Tested on ThinkPad T480s (i5-8350U, Intel 8265 WiFi, Kaby Lake-R)
 - Auto-updates itself on launch via GitHub
+
+
+
+
+
+
+### oh right my tiktok is @hackmatetech
+- also heres proof @theghostrdr

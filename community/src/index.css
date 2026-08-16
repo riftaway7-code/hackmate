@@ -3,3 +3,5 @@
 @media(max-width:620px){.app-shell{display:block}.sidebar{position:fixed;inset:auto 0 0;width:100%;height:62px;padding:7px 12px;flex-direction:row;border:0;border-top:1px solid var(--border)}.server-mark{width:42px;height:42px;border-radius:12px}.sidebar-rule,.sidebar-home{display:none}.channel-list{margin-left:auto;flex-direction:row}.channel-link{width:42px;height:42px}.topbar{height:62px;padding:0 16px}.brand-section,.user-copy{display:none}.content-area,.footer{width:calc(100% - 28px)}.content-area{padding-top:22px;padding-bottom:88px}.category-grid{grid-template-columns:1fr}.page-header{align-items:flex-start;flex-direction:column}.post-card{grid-template-columns:48px minmax(0,1fr)}.reply-thread{margin-left:13px}.community-panel{display:none}}
 .app-main{grid-column:2}
 @media(max-width:620px){.app-main{grid-column:auto}}
+.server-mark{overflow:hidden;background:#171b21;padding:5px}
+.server-mark img{display:block;width:100%;height:100%;object-fit:contain}

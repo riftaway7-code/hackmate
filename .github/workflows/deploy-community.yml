@@ -36,6 +36,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/community
+          git add docs
           git diff --staged --quiet || git commit -m "chore: rebuild community site"
           git push

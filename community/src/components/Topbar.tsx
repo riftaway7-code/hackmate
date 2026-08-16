@@ -3,18 +3,18 @@ import { useAuth } from '../lib/AuthContext'
 
 export function Topbar() {
   const { user, profile, loading, signInWithGithub, signOut } = useAuth()
+  const identity = profile?.github_username ?? user?.email ?? '?'
 
   return (
-    <div className="topbar">
-      <Link to="/" className="brand">HACKMATE // COMMUNITY</Link>
+    <header className="topbar">
+      <Link to="/" className="brand"><span className="brand-status" /><span>HackMate</span><span className="brand-section">Community</span></Link>
       {loading ? null : user ? (
-        <div className="meta" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-          <span>{profile?.github_username ?? user.email}</span>
-          <button className="secondary" onClick={signOut}>sign out</button>
+        <div className="user-menu">
+          <div className="avatar">{identity.slice(0, 1).toUpperCase()}</div>
+          <div className="user-copy"><strong>{identity}</strong><span>online</span></div>
+          <button className="icon-button" onClick={signOut} title="Sign out">↪</button>
         </div>
-      ) : (
-        <button onClick={signInWithGithub}>sign in with github</button>
-      )}
-    </div>
+      ) : <button className="github-button" onClick={signInWithGithub}>Sign in with GitHub</button>}
+    </header>
   )
 }

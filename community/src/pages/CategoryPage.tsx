@@ -20,60 +20,30 @@ export function CategoryPage() {
       const cat = await fetchCategory(slug)
       setCategory(cat)
       if (!cat) return
-      const p = await fetchPosts(cat.id)
-      setPosts(p)
-      if (user) {
-        const voted = await fetchMyVotes(user.id, p.map((x) => x.id), [])
-        setVotedIds(voted)
-      }
-    } catch (e) {
-      setError((e as Error).message)
-    }
+      const nextPosts = await fetchPosts(cat.id)
+      setPosts(nextPosts)
+      if (user) setVotedIds(await fetchMyVotes(user.id, nextPosts.map((post) => post.id), []))
+    } catch (caught) { setError((caught as Error).message) }
   }
 
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug, user])
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [slug, user])
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <div className="section-title">{category?.name ?? slug}</div>
-        {user ? (
-          <button onClick={() => setShowForm((s) => !s)}>{showForm ? 'cancel' : '+ new post'}</button>
-        ) : (
-          <button onClick={signInWithGithub}>sign in to post</button>
-        )}
+      <div className="page-header">
+        <div><div className="eyebrow">Channel</div><h1># {category?.name ?? slug}</h1><div className="page-subtitle">{category?.description}</div></div>
+        {user ? <button onClick={() => setShowForm((visible) => !visible)}>{showForm ? 'Cancel' : '+ New post'}</button> : <button onClick={signInWithGithub}>Sign in to post</button>}
       </div>
-
       {error && <div className="error">{error}</div>}
-
-      {showForm && category && (
-        <NewPostForm
-          categoryId={category.id}
-          onCreated={() => {
-            setShowForm(false)
-            load()
-          }}
-        />
-      )}
-
-      {!posts && !error && <div className="meta">loading…</div>}
-      {posts?.length === 0 && <div className="meta">No posts yet — be the first.</div>}
-      {posts?.map((p) => (
-        <div key={p.id} className="card">
-          <Link to={`/p/${p.id}`} style={{ textDecoration: 'none' }}>
-            <div style={{ color: 'var(--text)' }}>{p.title}</div>
-          </Link>
-          <div className="meta" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginTop: '0.3rem' }}>
-            <VoteButton score={p.score ?? 0} voted={votedIds.has(p.id)} postId={p.id} />
-            <span>{p.comment_count ?? 0} comments</span>
-            <span>by {p.profiles?.github_username ?? 'unknown'}</span>
-            <span>{new Date(p.created_at).toLocaleDateString()}</span>
-          </div>
-        </div>
-      ))}
+      {showForm && category && <NewPostForm categoryId={category.id} onCreated={() => { setShowForm(false); load() }} />}
+      {!posts && !error && <div className="meta">Loading posts…</div>}
+      {posts?.length === 0 && <div className="empty-state">No posts yet — start the conversation.</div>}
+      <div className="feed">{posts?.map((post) => (
+        <article key={post.id} className="card post-card">
+          <div className="vote-column"><VoteButton score={post.score ?? 0} voted={votedIds.has(post.id)} postId={post.id} /></div>
+          <div className="post-content"><Link to={`/p/${post.id}`} className="post-title">{post.title}</Link><div className="meta post-meta"><span>by <strong>{post.profiles?.github_username ?? 'unknown'}</strong></span><span>◯ {post.comment_count ?? 0} comments</span><span>{new Date(post.created_at).toLocaleDateString()}</span></div></div>
+        </article>
+      ))}</div>
     </div>
   )
 }
@@ -84,32 +54,19 @@ function NewPostForm({ categoryId, onCreated }: { categoryId: string; onCreated:
   const [body, setBody] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  async function submit(event: FormEvent) {
+    event.preventDefault()
     if (!user || !title.trim()) return
-    setBusy(true)
-    setError(null)
-    try {
-      await createPost(categoryId, user.id, title.trim(), body.trim())
-      setTitle('')
-      setBody('')
-      onCreated()
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
+    setBusy(true); setError(null)
+    try { await createPost(categoryId, user.id, title.trim(), body.trim()); setTitle(''); setBody(''); onCreated() }
+    catch (caught) { setError((caught as Error).message) } finally { setBusy(false) }
   }
-
   return (
-    <form onSubmit={submit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-      <input placeholder="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} required />
-      <textarea placeholder="body (optional)" rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
+    <form onSubmit={submit} className="card composer">
+      <input placeholder="Give your post a clear title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={300} required />
+      <textarea placeholder="Add context, specs, logs, or anything else that helps…" rows={5} value={body} onChange={(event) => setBody(event.target.value)} />
       {error && <div className="error">{error}</div>}
-      <div>
-        <button disabled={busy} type="submit">post</button>
-      </div>
+      <div><button disabled={busy} type="submit">Publish post</button></div>
     </form>
   )
 }

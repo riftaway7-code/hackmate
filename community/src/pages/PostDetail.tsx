@@ -42,15 +42,16 @@ export function PostDetail() {
 
   return (
     <div>
-      <div className="card" style={{ borderLeftColor: 'var(--accent)' }}>
-        <div style={{ fontSize: '1.05rem', marginBottom: '0.4rem' }}>{post.title}</div>
-        {post.body && <div style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', marginBottom: '0.6rem' }}>{post.body}</div>}
-        <div className="meta" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+      <article className="card post-detail">
+        <div className="eyebrow">Discussion</div>
+        <h1>{post.title}</h1>
+        {post.body && <div className="post-body">{post.body}</div>}
+        <div className="meta post-meta">
           <VoteButton score={post.score ?? 0} voted={votedIds.has(post.id)} postId={post.id} />
           <span>by {post.profiles?.github_username ?? 'unknown'}</span>
           <span>{new Date(post.created_at).toLocaleString()}</span>
         </div>
-      </div>
+      </article>
 
       <div className="section-title">Comments</div>
 
@@ -68,7 +69,7 @@ export function PostDetail() {
             onReply={() => setReplyTo(c.id)}
           />
           {replyTo === c.id && (
-            <div style={{ marginLeft: '1.5rem' }}>
+            <div className="reply-thread">
               <CommentForm
                 postId={post.id}
                 parentId={c.id}
@@ -80,7 +81,7 @@ export function PostDetail() {
             </div>
           )}
           {repliesOf(c.id).map((r) => (
-            <div key={r.id} style={{ marginLeft: '1.5rem' }}>
+            <div key={r.id} className="reply-thread">
               <CommentCard comment={r} voted={votedIds.has(r.id)} />
             </div>
           ))}
@@ -100,9 +101,9 @@ function CommentCard({
   onReply?: () => void
 }) {
   return (
-    <div className="card">
-      <div style={{ whiteSpace: 'pre-wrap' }}>{comment.body}</div>
-      <div className="meta" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginTop: '0.4rem' }}>
+    <div className="card comment-card">
+      <div className="comment-body">{comment.body}</div>
+      <div className="meta comment-actions">
         <VoteButton score={comment.score ?? 0} voted={voted} commentId={comment.id} />
         <span>by {comment.profiles?.github_username ?? 'unknown'}</span>
         <span>{new Date(comment.created_at).toLocaleString()}</span>
@@ -147,7 +148,7 @@ function CommentForm({
   }
 
   return (
-    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: '0.6rem 0' }}>
+    <form onSubmit={submit} className="card composer">
       <textarea
         placeholder={parentId ? 'write a reply…' : 'write a comment…'}
         rows={3}

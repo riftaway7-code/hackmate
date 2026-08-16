@@ -18,7 +18,7 @@ export default function App() {
             <Route path="/p/:postId" element={<PostDetail />} />
           </Routes>
         </main>
-        <div className="footer">HackMate Community · <a href="../">back to hackmate</a></div>
+        <div className="footer">MIT License · <a href="https://github.com/riftaway7-code/hackmate">GitHub</a> · <a href="https://github.com/riftaway7-code/hackmate/blob/main/SECURITY.md">Security</a></div>
       </div>
     </div>
   )

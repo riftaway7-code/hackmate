@@ -24,7 +24,7 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <a className="sidebar-home" href="../" title="Back to HackMate">↗</a>
+      <a className="sidebar-home" href="https://github.com/riftaway7-code/hackmate/releases/latest" title="Download HackMate">↓</a>
     </aside>
   )
 }

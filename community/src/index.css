@@ -5,3 +5,13 @@
 @media(max-width:620px){.app-main{grid-column:auto}}
 .server-mark{overflow:hidden;background:#171b21;padding:5px}
 .server-mark img{display:block;width:100%;height:100%;object-fit:contain}
+
+/* HackMate brand theme: flat black, graphite, white, and logo blue. */
+:root{--bg:#08090b;--surface:#101216;--surface-2:#16191e;--surface-3:#1c2026;--border:#272c33;--text:#f0f3f6;--muted:#929aa5;--faint:#606975;--green:#28a9f7;--green-soft:rgba(40,169,247,.12);--blue:#28a9f7}
+.server-mark{background:#0b0d10;box-shadow:none;border:1px solid #252b32}
+.brand-status{background:#28a9f7;box-shadow:none}
+.github-button{background:#28a9f7;color:#061018;border-color:#28a9f7}
+.github-button:hover{background:#4bb9fa!important}
+.avatar{color:#061018;background:#28a9f7}
+.hero{background:var(--surface)}
+.community-panel-accent{height:52px;background:#111c25;border-bottom:3px solid #28a9f7}

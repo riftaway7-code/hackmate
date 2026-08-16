@@ -11,7 +11,9 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <Link to="/" className="server-mark" aria-label="HackMate Community">HM</Link>
+      <Link to="/" className="server-mark" aria-label="HackMate Community">
+        <img src={`${import.meta.env.BASE_URL}hackmate-logo.png`} alt="" />
+      </Link>
       <div className="sidebar-rule" />
       <nav className="channel-list" aria-label="Community categories">
         <div className="channel-heading">Channels</div>

@@ -70,7 +70,7 @@ class FetchProjectStatsTests(unittest.TestCase):
         with patch.object(project_stats, "_fetch_json", side_effect=fake):
             data = project_stats.fetch_project_stats()
 
-        self.assertEqual(data["stars"], 300)          # repo wins over stats.json
+        self.assertEqual(data["stars"], 300)
         self.assertEqual(data["total_downloads"], 42000)
         self.assertEqual(data["open_issues"], 9)
         self.assertEqual(data["latest_tag"], "v2.0.0")

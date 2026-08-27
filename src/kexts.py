@@ -381,10 +381,6 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     vendor = _dmi("sys_vendor") or _dmi("board_vendor")
     board_name = _dmi("board_name")
-    # Trust the profile. touchpad_type is detected once during hardware
-    # profiling (hardware.py) and stored there; re-detecting live here meant a
-    # manually-entered profile got whatever touchpad the machine *running*
-    # HackMate has, not the target's.
     tp = (profile.touchpad_type or "").strip().lower() or "none"
     legacy = _is_legacy(profile)
 

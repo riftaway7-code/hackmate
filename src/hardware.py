@@ -264,7 +264,6 @@ SMBIOS_MAP = {
     (7, "laptop"):  "MacBookPro14,1",
     (8, "laptop"):  "MacBookPro15,2",
     (9, "laptop"):  "MacBookPro16,1",
-    (9, "desktop"): "iMac19,1",
     (10, "laptop"): "MacBookPro16,2",
     (11, "laptop"): "MacBookPro16,1",
     (12, "laptop"): "MacBookPro16,1",

@@ -195,7 +195,7 @@ hackmate is free and open source. if it saved u hours of config.plist hell, cons
 - tested on thinkpad t480s (i5-8350u, intel 8265 wifi, kaby lake-r)
 - auto-updates itself on launch via github
 
-
+## THIS IS THE ONLY AND ONLY HACKMATE REPO, ANY REPO WITH SKIDDED CODE AND/OR READVERTISEMENT WILL BE TAKEN DOWN AS PER THE MIT. 
 
 
 ### oh right my tiktok is @hackmatetech

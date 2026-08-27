@@ -440,6 +440,15 @@ def _detect_cpu_windows(profile: HardwareProfile):
     name = _ps("(Get-WmiObject Win32_Processor | Select-Object -First 1).Name")
     profile.cpu_name = name.strip()
     vendor = "intel" if "intel" in name.lower() else "amd" if "amd" in name.lower() else "unknown"
+    if vendor == "unknown":
+        # Marketing name didn't say — fall back to the CPUID vendor string so a
+        # Ryzen/Threadripper still routes into the AMD path (and gets the AMD
+        # Vanilla kernel patches) instead of being treated as Intel.
+        mfr = _ps("(Get-WmiObject Win32_Processor | Select-Object -First 1).Manufacturer").strip().lower()
+        if "authenticamd" in mfr or "amd" in mfr:
+            vendor = "amd"
+        elif "genuineintel" in mfr or "intel" in mfr:
+            vendor = "intel"
     profile.cpu_vendor = vendor
 
     if vendor == "intel":

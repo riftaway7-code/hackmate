@@ -168,8 +168,12 @@ IGPU_FRAMEBUFFERS: dict[str, list[tuple[str, str]]] = {
 }
 
 def suggest_framebuffers(gpu_device_id: str) -> list[tuple[str, str]]:
-    """Return list of (hex, label) suggestions for a GPU device ID."""
-    return IGPU_FRAMEBUFFERS.get(gpu_device_id.lower(), [])
+    """Return list of (hex, label) suggestions for a GPU device ID.
+
+    Accepts any shape the detectors emit ('8086:5917', '0x5917', '5917').
+    """
+    key = gpu_device_id.lower().replace("0x", "").rsplit(":", 1)[-1].strip()
+    return IGPU_FRAMEBUFFERS.get(key, [])
 
 def get_igpu_platform_id(cfg: dict) -> str:
     try:

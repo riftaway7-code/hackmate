@@ -55,6 +55,25 @@ class HardwareProfile:
 
     raw_pci: list = field(default_factory=list)
 
+
+def pci_id_device_part(raw: str) -> str:
+    """Bare 4-hex device id from whatever shape a per-OS detector stored:
+    '8086:5917' / '0x5917' / '5917' / '1002:73FF' -> '5917' / '73ff' (lowercase).
+    Used for lookups keyed on the device id alone (INTEL_GENERATIONS, framebuffers)."""
+    return raw.lower().replace("0x", "").rsplit(":", 1)[-1].strip()
+
+
+def format_device_id(raw: str) -> str:
+    """Readable PCI id for the scan screen. Keeps 'vendor:device' when the
+    vendor is known, otherwise just the device id — always lowercase."""
+    if not raw:
+        return ""
+    parts = [p.strip() for p in raw.lower().replace("0x", "").split(":") if p.strip()]
+    if len(parts) >= 2:
+        return f"{parts[0]}:{parts[1]}"
+    return parts[0] if parts else ""
+
+
 def needs_dgpu_disable_prompt(profile: HardwareProfile) -> bool:
     return bool(
         profile.dgpu_vendor
@@ -448,7 +467,7 @@ def _detect_cpu_windows(profile: HardwareProfile):
         profile.cpu_codename = codename or "Unknown"
 
         if profile.gpu_device_id:
-            dev_id = profile.gpu_device_id.lower()
+            dev_id = pci_id_device_part(profile.gpu_device_id)
             if dev_id in INTEL_GENERATIONS:
                 gen, codename, oc_platform = INTEL_GENERATIONS[dev_id]
                 profile.cpu_generation = gen
@@ -1196,27 +1215,51 @@ def _detect_gpu_macos(profile: HardwareProfile):
     sp = _sp("SPDisplaysDataType")
     intel_name = ""
     discrete_name = discrete_vendor = ""
+    cur = ""                                  # bucket the following id lines belong to
+    ven = {"intel": "", "discrete": ""}
+    dev = {"intel": "", "discrete": ""}
     for line in sp.splitlines():
         line = line.strip()
         if not line:
             continue
         lower = line.lower()
-        name = line.split(":")[-1].strip() if ":" in line else line
+
+        # "Vendor: AMD (0x1002)" / "Vendor ID: 0x1002" / "Device ID: 0x73bf"
+        # belong to whichever GPU block is currently being read.
+        if cur and ("device id" in lower or "vendor id" in lower or lower.startswith("vendor:")):
+            m = re.search(r"0x([0-9a-f]{2,4})", lower)
+            if m:
+                target = dev if "device id" in lower else ven
+                target[cur] = m.group(1).zfill(4)
+            continue
+
+        name = line.split(":", 1)[-1].strip() if ":" in line else line
         if "intel" in lower and ("uhd" in lower or "iris" in lower or "hd graphics" in lower):
+            cur = "intel"
             if not intel_name:
                 intel_name = name
         elif "amd" in lower or "radeon" in lower:
+            cur = "discrete"
             if not discrete_name:
                 discrete_name, discrete_vendor = name, "amd"
         elif "nvidia" in lower or "geforce" in lower:
+            cur = "discrete"
             if not discrete_name:
                 discrete_name, discrete_vendor = name, "nvidia"
 
+    def _id(bucket: str) -> str:
+        if dev[bucket] and ven[bucket]:
+            return f"{ven[bucket]}:{dev[bucket]}"
+        return dev[bucket]
+
     if intel_name:
         profile.gpu_name, profile.gpu_vendor = intel_name, "intel"
+        profile.gpu_device_id = _id("intel")
         profile.dgpu_name, profile.dgpu_vendor = discrete_name, discrete_vendor
+        profile.dgpu_device_id = _id("discrete")
     elif discrete_name:
         profile.gpu_name, profile.gpu_vendor = discrete_name, discrete_vendor
+        profile.gpu_device_id = _id("discrete")
 
 _NOT_ONBOARD_AUDIO = (
     "blackhole", "existential audio", "soundflower", "loopback",
@@ -1355,7 +1398,11 @@ if __name__ == "__main__":
     print(f"Codename:   {p.cpu_codename} (Gen {p.cpu_generation})")
     print(f"Platform:   {p.platform}")
     print(f"OC Target:  {p.oc_platform}")
-    print(f"GPU:        {p.gpu_name} [{p.gpu_vendor}]")
+    print(f"GPU:        {p.gpu_name} [{p.gpu_vendor}]"
+          + (f"  device-id {format_device_id(p.gpu_device_id)}" if p.gpu_device_id else ""))
+    if p.dgpu_name:
+        print(f"dGPU:       {p.dgpu_name} [{p.dgpu_vendor}]"
+              + (f"  device-id {format_device_id(p.dgpu_device_id)}" if p.dgpu_device_id else ""))
     print(f"Audio:      {p.audio_name} / codec: {p.audio_codec}")
     print(f"Ethernet:   {p.ethernet_name} [{p.ethernet_chipset}]")
     print(f"WiFi:       {p.wifi_name} [{p.wifi_chipset}]")

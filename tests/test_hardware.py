@@ -768,6 +768,68 @@ class LinuxGpuFallbackNameTests(unittest.TestCase):
         self.assertEqual(profile.gpu_vendor, "intel")
 
 
+class DeviceIdFormatTests(unittest.TestCase):
+    def test_format_device_id_keeps_vendor_when_present(self):
+        self.assertEqual(hardware.format_device_id("8086:5917"), "8086:5917")
+        self.assertEqual(hardware.format_device_id("0x1002:0x73BF"), "1002:73bf")
+
+    def test_format_device_id_bare_and_prefixed(self):
+        self.assertEqual(hardware.format_device_id("591B"), "591b")
+        self.assertEqual(hardware.format_device_id("0x5917"), "5917")
+        self.assertEqual(hardware.format_device_id(""), "")
+
+    def test_pci_id_device_part_strips_vendor_and_prefix(self):
+        self.assertEqual(hardware.pci_id_device_part("8086:5917"), "5917")
+        self.assertEqual(hardware.pci_id_device_part("0x5917"), "5917")
+        self.assertEqual(hardware.pci_id_device_part("1002:73FF"), "73ff")
+
+
+class MacosGpuDeviceIdTests(unittest.TestCase):
+    _SP = (
+        "Graphics/Displays:\n\n"
+        "    Intel UHD Graphics 620:\n\n"
+        "      Chipset Model: Intel UHD Graphics 620\n"
+        "      Type: GPU\n"
+        "      Bus: Built-In\n"
+        "      Vendor: Intel (0x8086)\n"
+        "      Device ID: 0x5917\n"
+        "      Revision ID: 0x0007\n\n"
+        "    AMD Radeon RX 6800 XT:\n\n"
+        "      Chipset Model: AMD Radeon RX 6800 XT\n"
+        "      Type: GPU\n"
+        "      Bus: PCIe\n"
+        "      Vendor: AMD (0x1002)\n"
+        "      Device ID: 0x73bf\n"
+        "      Revision ID: 0x00c0\n"
+    )
+
+    def test_igpu_and_dgpu_device_ids_are_parsed_and_bucketed(self):
+        profile = hardware.HardwareProfile()
+        with patch.object(hardware, "_sp", return_value=self._SP):
+            hardware._detect_gpu_macos(profile)
+
+        self.assertEqual(profile.gpu_name, "Intel UHD Graphics 620")
+        self.assertEqual(profile.gpu_device_id, "8086:5917")
+        self.assertEqual(profile.dgpu_name, "AMD Radeon RX 6800 XT")
+        self.assertEqual(profile.dgpu_vendor, "amd")
+        self.assertEqual(profile.dgpu_device_id, "1002:73bf")
+
+    def test_single_discrete_gpu_lands_in_primary_slot_with_its_id(self):
+        sp = (
+            "Graphics/Displays:\n\n"
+            "    AMD Radeon RX 6800 XT:\n\n"
+            "      Chipset Model: AMD Radeon RX 6800 XT\n"
+            "      Vendor: AMD (0x1002)\n"
+            "      Device ID: 0x73bf\n"
+        )
+        profile = hardware.HardwareProfile()
+        with patch.object(hardware, "_sp", return_value=sp):
+            hardware._detect_gpu_macos(profile)
+
+        self.assertEqual(profile.gpu_vendor, "amd")
+        self.assertEqual(profile.gpu_device_id, "1002:73bf")
+
+
 class SmbiosGenerationMatchTests(unittest.TestCase):
     def test_zen_2_laptop_uses_amd_smbios(self):
         profile = hardware.HardwareProfile(

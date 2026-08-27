@@ -146,7 +146,7 @@ except ModuleNotFoundError:
     print(f"  {sys.executable} -m pip install textual\n")
     sys.exit(1)
 
-from hardware import scan, HardwareProfile, needs_dgpu_disable_prompt
+from hardware import scan, HardwareProfile, needs_dgpu_disable_prompt, format_device_id
 from kexts import select_kexts, get_alc_layout, alc_layout_is_known
 from smbios import generate as gen_smbios
 from config_gen import generate as gen_config, write_plist, _required_ssdts
@@ -1488,14 +1488,20 @@ class ScanScreen(Screen):
         kexts = select_kexts(profile, wifi_kext_mode=self.app.wifi_kext_mode)
         layout = get_alc_layout(profile.audio_codec)
         gen_suffix = f"  (Gen {profile.cpu_generation})" if profile.cpu_vendor != "amd" else ""
+        gpu_id  = format_device_id(profile.gpu_device_id)
+        dgpu_id = format_device_id(profile.dgpu_device_id)
         lines = [
             f"  CPU       {profile.cpu_name}",
             f"  Codename  {profile.cpu_codename}{gen_suffix}",
             f"  Platform  {profile.platform}  —  {profile.oc_platform}",
-            f"  GPU       {profile.gpu_name} [{profile.gpu_vendor}]",
+            f"  GPU       {profile.gpu_name} [{profile.gpu_vendor}]"
+            + (f"  —  device-id {gpu_id}" if gpu_id else ""),
         ]
         if profile.dgpu_name:
-            lines.append(f"  dGPU      {profile.dgpu_name} [{profile.dgpu_vendor}]")
+            lines.append(
+                f"  dGPU      {profile.dgpu_name} [{profile.dgpu_vendor}]"
+                + (f"  —  device-id {dgpu_id}" if dgpu_id else "")
+            )
         lines += [
             f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}",
             f"  Ethernet  {profile.ethernet_name or 'None'}",

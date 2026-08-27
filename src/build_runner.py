@@ -18,7 +18,7 @@ from recovery import MacOSVersion, download_recovery, _ensure_cert_bundle_env
 from smbios import generate as gen_smbios, SMBIOSData
 from config_gen import (
     generate as gen_config, write_plist, sync_executable_paths,
-    strip_missing_ssdts, _required_ssdts,
+    strip_missing_ssdts, _required_ssdts, ensure_i2c_trackpad_acpi,
 )
 from kexts import select_kexts, download_kexts, download_heliport, download_usbtoolbox_app, fetch_opencore
 from auto_usb_map import generate_auto_map, write_map_kext
@@ -377,6 +377,19 @@ def run(params: dict, emit) -> dict:
                 plistlib.dump(cfg, f)
             if patches_gone:
                 log(f"  Removed {patches_gone} ACPI rename(s) left without their SSDT", "info")
+
+        # Airtight I2C trackpad: SSDT generation adds SSDT-GPI0 on its own when
+        # the target DSDT defines an I2C-HID device, even if _required_ssdts
+        # never asked for it (host-side touchpad probe couldn't see the target).
+        # Make the config actually reference whatever landed in acpi_dir.
+        if (acpi_dir / "SSDT-GPI0.aml").exists():
+            with open(str(config_path), "rb") as f:
+                cfg = plistlib.load(f)
+            added = ensure_i2c_trackpad_acpi(cfg, acpi_dir)
+            if added:
+                with open(str(config_path), "wb") as f:
+                    plistlib.dump(cfg, f)
+                log(f"  I2C-HID trackpad detected in DSDT — wired in {', '.join(added)}", "ok")
 
         if profile.wifi_chipset == "realtek" and profile.wifi_pci_device >= 0:
             disable_result = generate_disable_ssdt(

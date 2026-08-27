@@ -306,6 +306,31 @@ PATCH_REQUIRES_SSDT: dict[str, str] = {
     "GPRW to XGPR":  "SSDT-GPRW",
 }
 
+# comment -> (find_hex, replace_hex)
+_RENAMES: dict[str, tuple[str, str]] = {
+    "OSID to XSID": ("4F534944", "58534944"),
+    "_OSI to XOSI": ("5F4F5349", "584F5349"),
+    "GPRW to XGPR": ("47505257", "58475052"),
+}
+
+def _acpi_rename(comment: str, find: str, replace: str, count: int = 0, table: str = "") -> dict:
+    return {
+        "Base":             "",
+        "BaseSkip":         0,
+        "Comment":          comment,
+        "Count":            count,
+        "Enabled":          True,
+        "Find":             bytes.fromhex(find),
+        "Limit":            0,
+        "Mask":             b"",
+        "OemTableId":       b"",
+        "Replace":          bytes.fromhex(replace),
+        "ReplaceMask":      b"",
+        "Skip":             0,
+        "TableLength":      0,
+        "TableSignature":   table.encode() if table else b"",
+    }
+
 def _acpi_add(ssdts: list[str]) -> list[dict]:
     return [
         {
@@ -324,37 +349,49 @@ def _acpi_patches(profile: HardwareProfile, ssdts: list[str]) -> list[dict]:
     """
     patches = []
     loaded = set(ssdts)
-
-    def patch(comment, find, replace, count=0, table=""):
-        return {
-            "Base":             "",
-            "BaseSkip":         0,
-            "Comment":          comment,
-            "Count":            count,
-            "Enabled":          True,
-            "Find":             bytes.fromhex(find),
-            "Limit":            0,
-            "Mask":             b"",
-            "OemTableId":       b"",
-            "Replace":          bytes.fromhex(replace),
-            "ReplaceMask":      b"",
-            "Skip":             0,
-            "TableLength":      0,
-            "TableSignature":   table.encode() if table else b"",
-        }
-
-    def add(comment, find, replace, **kw):
+    for comment, (find, replace) in _RENAMES.items():
         required = PATCH_REQUIRES_SSDT.get(comment)
         if required and required not in loaded:
-            return
-        patches.append(patch(comment, find, replace, **kw))
-
-    add("OSID to XSID", "4F534944", "58534944")
-    add("_OSI to XOSI", "5F4F5349", "584F5349")
-
-    add("GPRW to XGPR", "47505257", "58475052")
-
+            continue
+        patches.append(_acpi_rename(comment, find, replace))
     return patches
+
+def ensure_i2c_trackpad_acpi(config: dict, acpi_dir: Path) -> list[str]:
+    """Idempotently make `config` reference everything an I2C-HID trackpad needs:
+    SSDT-GPI0.aml (GPIO pinning) + SSDT-XOSI.aml, plus the `_OSI to XOSI` /
+    `OSID to XSID` renames that let the trackpad's Windows-gated `_STA`/`_DSM`
+    run under macOS. Called after SSDT generation when the target DSDT is found
+    to contain an I2C-HID device, regardless of what kext/touchpad detection
+    concluded.
+
+    Only references a table whose .aml is actually present in `acpi_dir` (a
+    dangling ACPI/Add entry fails the boot), and only adds a rename once its
+    backing SSDT is referenced. Returns what it added (empty if already there).
+    """
+    added: list[str] = []
+    acpi = config.setdefault("ACPI", {})
+
+    tables = acpi.setdefault("Add", [])
+    have_paths = {e.get("Path", "") for e in tables if isinstance(e, dict)}
+    present = set()
+    for name in ("SSDT-GPI0", "SSDT-XOSI"):
+        if not (acpi_dir / f"{name}.aml").exists():
+            continue
+        present.add(name)
+        if f"{name}.aml" not in have_paths:
+            tables.append({"Comment": name, "Enabled": True, "Path": f"{name}.aml"})
+            added.append(f"{name}.aml")
+
+    if "SSDT-XOSI" in present:
+        patches = acpi.setdefault("Patch", [])
+        have_comments = {p.get("Comment", "") for p in patches if isinstance(p, dict)}
+        for comment in ("_OSI to XOSI", "OSID to XSID"):
+            if comment not in have_comments:
+                find, replace = _RENAMES[comment]
+                patches.append(_acpi_rename(comment, find, replace))
+                added.append(comment)
+
+    return added
 
 def _device_properties(
     profile: HardwareProfile,

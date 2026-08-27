@@ -281,11 +281,21 @@ def _inspect_dsdt(dsdt_path: Path) -> dict:
     except Exception:
         return {"has_awac": False, "ec_name": "EC0", "igpu_name": "GFX0",
                 "cpu_path": r"\_SB.PR00", "has_gpi0": False, "has_gprw": False,
-                "has_acpi0007": None}
+                "has_acpi0007": None, "has_i2c_hid": False}
 
     has_awac = b"ACPI000E" in data
     has_gprw = b"GPRW" in data
     has_acpi0007 = b"ACPI0007" in data
+
+    # I2C-HID trackpad/touchscreen: _HID/_CID of "PNP0C50" (stored either as the
+    # literal string or the 4-byte compressed EisaId 0x41 0xD0 0x0C 0x50) or the
+    # plain-string id "ACPI0C50". Its presence means the machine needs GPIO
+    # pinning (SSDT-GPI0) whatever the host-side touchpad probe decided.
+    has_i2c_hid = (
+        b"PNP0C50" in data
+        or b"ACPI0C50" in data
+        or b"\x41\xd0\x0c\x50" in data
+    )
 
     ec_name = "EC0"
     for candidate in (b"EC0 ", b"H_EC", b"ECDV", b"EC0_"):
@@ -309,6 +319,7 @@ def _inspect_dsdt(dsdt_path: Path) -> dict:
         "has_gpi0":  has_gpi0,
         "has_gprw":  has_gprw,
         "has_acpi0007": has_acpi0007,
+        "has_i2c_hid": has_i2c_hid,
     }
 
 def _compile_dsl(dsl: str, name: str, acpi_dir: Path, iasl) -> bool:
@@ -523,7 +534,23 @@ def generate(
         cb("  DSDT not found — using generic templates")
         dsdt_info = {"has_awac": False, "ec_name": "EC0", "igpu_name": "GFX0",
                      "cpu_path": r"\_SB.PR00", "has_gpi0": False, "has_gprw": False,
-                     "has_acpi0007": None}
+                     "has_acpi0007": None, "has_i2c_hid": False}
+
+    # Airtight trackpad path: the DSDT is the source of truth. If it defines an
+    # I2C-HID device, the machine needs SSDT-GPI0 (+ SSDT-XOSI) no matter what
+    # the host-side touchpad probe or kext selection decided — pull them into
+    # this run so build_runner can wire them into the config afterwards.
+    if dsdt_info.get("has_i2c_hid"):
+        already = set(needed) | set(doable)
+        gpio_aliases = {"SSDT-GPI0", "SSDT-GPIO"}
+        for extra in ("SSDT-GPI0", "SSDT-XOSI"):
+            if extra in already:
+                continue
+            if extra == "SSDT-GPI0" and already & gpio_aliases:
+                continue
+            cb(f"  DSDT has an I2C-HID device — generating {extra} for the trackpad")
+            doable.append(extra)
+            already.add(extra)
 
     ssdttime_dir = script.parent if script else SSDTTIME_DIR
 

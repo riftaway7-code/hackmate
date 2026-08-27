@@ -66,6 +66,69 @@ class Acpi0007PlugFallbackTests(unittest.TestCase):
         self.assertFalse(results["SSDT-PLUG"].startswith("ERROR"))
 
 
+_I2C_HID_DSDT_STRING = b"DSDT\x00\x00\x00\x00...Device (TPD0)\n{ Name (_HID, \"ACPI0C50\") }\n"
+# _HID EisaId("PNP0C50") compresses to the four bytes 41 D0 0C 50
+_I2C_HID_DSDT_EISAID = b"DSDT\x00\x00\x00\x00...Device (TPL1)\n\x08_HID\x0c\x41\xd0\x0c\x50\n"
+_NO_TRACKPAD_DSDT = b"DSDT\x00\x00\x00\x00...Device (PS2K)\n{ Name (_HID, \"PNP0303\") }\n"
+
+
+class I2cHidDsdtDetectionTests(unittest.TestCase):
+    def _inspect(self, raw: bytes) -> dict:
+        f = tempfile.NamedTemporaryFile(suffix=".aml", delete=False)
+        try:
+            f.write(raw)
+            f.close()
+            return ssdt._inspect_dsdt(Path(f.name))
+        finally:
+            Path(f.name).unlink(missing_ok=True)
+
+    def test_acpi0c50_string_id_is_detected(self):
+        self.assertTrue(self._inspect(_I2C_HID_DSDT_STRING)["has_i2c_hid"])
+
+    def test_compressed_pnp0c50_eisaid_is_detected(self):
+        self.assertTrue(self._inspect(_I2C_HID_DSDT_EISAID)["has_i2c_hid"])
+
+    def test_ps2_only_dsdt_is_not_flagged(self):
+        self.assertFalse(self._inspect(_NO_TRACKPAD_DSDT)["has_i2c_hid"])
+
+
+class I2cHidForcesGpi0Tests(unittest.TestCase):
+    def setUp(self):
+        self.acpi_dir = Path(tempfile.mkdtemp(prefix="hackmate-test-acpi-"))
+        self.dsdt_file = Path(tempfile.mkdtemp(prefix="hackmate-test-dsdt-")) / "DSDT.aml"
+
+    def tearDown(self):
+        shutil.rmtree(self.acpi_dir, ignore_errors=True)
+        shutil.rmtree(self.dsdt_file.parent, ignore_errors=True)
+
+    def _generate(self, dsdt_bytes: bytes, needed=("SSDT-PLUG",)) -> dict:
+        self.dsdt_file.write_bytes(dsdt_bytes)
+        with (
+            patch.object(ssdt, "_ensure_ssdttime", side_effect=Exception("SSDTTime unavailable")),
+            patch.object(ssdt, "get_dsdt", return_value=self.dsdt_file),
+        ):
+            return ssdt.generate(
+                needed=list(needed),
+                acpi_dir=self.acpi_dir,
+                tmp=self.dsdt_file.parent,
+                cpu_generation=8,
+            )
+
+    def test_i2c_hid_dsdt_pulls_in_gpi0_and_xosi_even_when_not_requested(self):
+        results = self._generate(_I2C_HID_DSDT_STRING)
+
+        self.assertEqual(results.get("SSDT-GPI0"), "OK")
+        self.assertEqual(results.get("SSDT-XOSI"), "OK")
+        self.assertTrue((self.acpi_dir / "SSDT-GPI0.aml").exists())
+        self.assertTrue((self.acpi_dir / "SSDT-XOSI.aml").exists())
+
+    def test_no_i2c_hid_dsdt_does_not_add_gpi0(self):
+        results = self._generate(_NO_TRACKPAD_DSDT)
+
+        self.assertNotIn("SSDT-GPI0", results)
+        self.assertFalse((self.acpi_dir / "SSDT-GPI0.aml").exists())
+
+
 class UnknownDsdtPlugSafetyTests(unittest.TestCase):
     def setUp(self):
         self.acpi_dir = Path(tempfile.mkdtemp(prefix="hackmate-test-acpi-"))

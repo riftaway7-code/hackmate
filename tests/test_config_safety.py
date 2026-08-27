@@ -1,4 +1,6 @@
 import sys
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -1149,6 +1151,50 @@ class IntelGraphicsSafetyTests(unittest.TestCase):
         igpu = config["DeviceProperties"]["Add"]["PciRoot(0x0)/Pci(0x2,0x0)"]
         self.assertEqual(igpu["AAPL,snb-platform-id"], bytes.fromhex("10000300"))
         self.assertNotIn("AAPL,ig-platform-id", igpu)
+
+
+class EnsureI2cTrackpadAcpiTests(unittest.TestCase):
+    def setUp(self):
+        self.acpi_dir = Path(tempfile.mkdtemp(prefix="hackmate-test-acpi-"))
+        (self.acpi_dir / "SSDT-GPI0.aml").write_bytes(b"\x00")
+        (self.acpi_dir / "SSDT-XOSI.aml").write_bytes(b"\x00")
+
+    def tearDown(self):
+        shutil.rmtree(self.acpi_dir, ignore_errors=True)
+
+    def test_adds_tables_and_renames_to_a_bare_config(self):
+        cfg = {"ACPI": {"Add": [], "Patch": []}}
+
+        added = config_gen.ensure_i2c_trackpad_acpi(cfg, self.acpi_dir)
+
+        paths = {e["Path"] for e in cfg["ACPI"]["Add"]}
+        comments = {p["Comment"] for p in cfg["ACPI"]["Patch"]}
+        self.assertEqual(paths, {"SSDT-GPI0.aml", "SSDT-XOSI.aml"})
+        self.assertIn("_OSI to XOSI", comments)
+        self.assertIn("OSID to XSID", comments)
+        self.assertTrue(added)
+
+    def test_is_idempotent(self):
+        cfg = {"ACPI": {"Add": [], "Patch": []}}
+        config_gen.ensure_i2c_trackpad_acpi(cfg, self.acpi_dir)
+
+        second = config_gen.ensure_i2c_trackpad_acpi(cfg, self.acpi_dir)
+
+        self.assertEqual(second, [])
+        self.assertEqual(len(cfg["ACPI"]["Add"]), 2)
+        self.assertEqual(len(cfg["ACPI"]["Patch"]), 2)
+
+    def test_never_references_a_table_whose_aml_is_absent(self):
+        (self.acpi_dir / "SSDT-XOSI.aml").unlink()
+        cfg = {"ACPI": {"Add": [], "Patch": []}}
+
+        config_gen.ensure_i2c_trackpad_acpi(cfg, self.acpi_dir)
+
+        paths = {e["Path"] for e in cfg["ACPI"]["Add"]}
+        comments = {p["Comment"] for p in cfg["ACPI"]["Patch"]}
+        self.assertEqual(paths, {"SSDT-GPI0.aml"})
+        # no XOSI table -> no _OSI/OSID renames either
+        self.assertEqual(comments, set())
 
 
 if __name__ == "__main__":

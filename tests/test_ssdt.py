@@ -19,10 +19,15 @@ _LEGACY_DSDT = b"DSDT\x00\x00\x00\x00...Processor (PR00, 0x00, 0x00000410, 0x06)
 
 class Acpi0007DetectionTests(unittest.TestCase):
     def _inspect(self, raw: bytes) -> dict:
-        with tempfile.NamedTemporaryFile(suffix=".aml") as f:
+        # A NamedTemporaryFile can't be reopened while still open on Windows,
+        # so write, close, inspect, then unlink.
+        f = tempfile.NamedTemporaryFile(suffix=".aml", delete=False)
+        try:
             f.write(raw)
-            f.flush()
+            f.close()
             return ssdt._inspect_dsdt(Path(f.name))
+        finally:
+            Path(f.name).unlink(missing_ok=True)
 
     def test_detects_acpi0007_cpu_objects(self):
         self.assertTrue(self._inspect(_ACPI0007_DSDT)["has_acpi0007"])

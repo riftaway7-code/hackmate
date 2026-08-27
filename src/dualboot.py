@@ -197,7 +197,11 @@ def detect_bootloaders(part: PartitionInfo) -> BootloaderInfo | None:
             _scan_efi_dir(Path(tmp), info)
     finally:
         if mounted:
-            subprocess.run(["umount", tmp], capture_output=True, timeout=5)
+            r = subprocess.run(["umount", tmp], capture_output=True, timeout=5)
+            if r.returncode != 0:
+                # Busy/failed unmount — retry lazily so we don't leak a live
+                # mountpoint for the rest of the process lifetime.
+                subprocess.run(["umount", "-l", tmp], capture_output=True, timeout=5)
         try:
             os.rmdir(tmp)
         except OSError:

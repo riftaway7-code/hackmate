@@ -27,20 +27,9 @@ works on linux, windows, and macos as the host os — doesn't matter what ur run
 
 ## 📢 announcements
 
-**latest update** — went thru and fixed rocket lake getting mislabeled as tiger lake (was messing up gpu/platform detection), added warnings for hardware that just straight up wont boot (amd laptop cpus, mobile atom/celeron/pentium, rocket lake w/ no dgpu = no video output, atheros wifi past high sierra). also did a full audit of the kext db against live github data — fixed like 11 kexts that were silently broken (repo got renamed/deleted or the download pattern stopped matching, e.g. FakeSMC, VoodooHDA, NullEthernet, the whole BrcmPatchRAM bluetooth family), added 6 new ones that were missing, and yanked 3 that have zero working source anywhere rn. cleaned up a buncha unnecessary comment bloat in the code too.
+full release notes moved to [CHANGELOG.md](CHANGELOG.md) so this section doesn't keep growing forever — check there for the "what changed recently" rundown. quick version: recent work fixed rocket lake getting mislabeled as tiger lake, audited the whole kext db against live github data (fixed ~11 silently-broken kexts, added 6, yanked 3 dead ones), and squashed a batch of quietly-broken-but-still-booted EFI generation bugs in v2.0.0.
 
-**v2.0.0 is out** — biggest correctness release so far ngl. went thru the whole generation pipeline and found bugs that were producing EFIs that booted but were quietly broken. all fixed now:
-
-- **`setup.py` crashed on macos.** stock macos ships python 3.9 and setup.py had 3.10-only syntax in it, so it just died before doing anything. runs on 3.8+ now.
-- **acpi renames were applied without the ssdt that made them safe.** on every desktop + every ps/2-only laptop, `_OSI` got renamed to `XOSI` while nothing actually defined `XOSI` — so every firmware `_OSI` call pointed at a method that didn't exist. a rename only happens now if the table supplying its replacement is actually there.
-- **the instant-wake fix was backwards.** it renamed each device's `_PRW` and left an `XPRW` method that nothing called. fixed to the standard `GPRW` → `XGPR` w/ SSDT-GPRW supplying the replacement.
-- **intel wifi just never loaded.** `itlwm.kext` was given another kext's binary name so opencore refused to inject it. `ExecutablePath` now gets read straight from each bundle's own `Info.plist` so this class of bug literally can't happen again.
-- **usb port maps were doing nothing.** the map's `ExecutablePath` pointed at a binary that plist-only bundles don't even have, and applying a map was disabling `USBToolBox.kext` — the thing that actually reads the map.
-- **laptops were loading two acpi tables that both defined `_SB.USBX`.**
-
-also fixed: recovery downloads for 5 macos versions shared a cache dir (big sur/el capitan, monterey/sierra, etc) and could serve the wrong image; MLB board serials were 16 chars instead of 17; kexts were getting auto-added from github repos that don't exist anymore; bluetooth kexts had overlapping version windows; `iasl` was being looked up under the wrong filename which silently killed ssdt compilation on every platform; windows ethernet detection used a deprecated query that could grab a vpn/tunnel adapter instead of ur real nic.
-
-**new — efi health check.** point hackmate at any opencore efi, even one u built by hand, and it'll tell u whats actually wrong: orphaned acpi renames, kexts that'll never inject, usb ports that aren't really mapped, sip decoded flag by flag, deprecated kexts, missing `-no_compat_check`. it's on the welcome screen, or run it from terminal:
+**efi health check.** point hackmate at any opencore efi, even one u built by hand, and it'll tell u whats actually wrong: orphaned acpi renames, kexts that'll never inject, usb ports that aren't really mapped, sip decoded flag by flag, deprecated kexts, missing `-no_compat_check`. it's on the welcome screen, or run it from terminal:
 
 ```bash
 sudo .venv/bin/python3 src/hackmate.py --doctor            # finds your mounted EFI

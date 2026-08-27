@@ -24,13 +24,16 @@ Read this before opening a PR so your work doesn't get stuck in review.
 
 ## Testing Your Changes
 
-HackMate doesn't have an automated test suite yet, so manual testing is required.
+HackMate has an automated test suite under `tests/` (`python -m unittest discover -s tests -v`), run in CI on every PR — generated configs are also validated against the real `ocvalidate` binary. Run it before opening a PR, and add/update tests for anything you change.
+
+CI also measures coverage (`pip install coverage`, then `coverage run --source=src -m unittest discover -s tests`, then `coverage report`) and fails the build if it drops below 50% — see `.github/workflows/test.yml` for the exact command, including which files are excluded and why.
 
 **Minimum testing for any PR:**
 
+- Run the test suite: `python -m unittest discover -s tests -v`
 - Run HackMate on your machine and complete a full scan (`sudo .venv/bin/python3 src/hackmate.py`)
 - Confirm the hardware detection screen shows correct results for your system
-- If your change touches USB formatting, kext selection, config generation, or SSDT generation — run a Full Build and check the output
+- If your change touches USB formatting, kext selection, config generation, or SSDT generation — run a Full Build and check the output, and add a test under `tests/` if one doesn't already cover it
 
 **For hardware detection changes:**
 
@@ -70,6 +73,7 @@ HackMate doesn't have an automated test suite yet, so manual testing is required
 - Keep platform checks using `IS_WINDOWS`, `IS_MACOS`, `IS_LINUX` from `compat.py`
 - Hardware detection goes in `hardware.py`, EFI generation in `config_gen.py`, kext selection in `kexts.py`
 - If you add a new kext, add it to `kexts.py` with the correct `exe_name` if the binary name differs from the kext name
+- `i18n.py` currently only covers the welcome-screen menu (see its module docstring) — new user-facing strings elsewhere don't need to go through it unless you're deliberately extending translation coverage to that screen
 
 ---
 

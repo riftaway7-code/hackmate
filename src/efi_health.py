@@ -18,6 +18,8 @@ import plistlib
 import struct
 from pathlib import Path
 
+from efi_check import LILU_DEPENDENTS
+
 Finding = tuple  # (level, title, detail)
 
 APPLE_BOOT_GUID = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
@@ -235,9 +237,7 @@ def _check_kexts(cfg: dict, kext_dir: Path, out: list):
     if "Lilu.kext" in order:
         lilu = order.index("Lilu.kext")
         late = [k for k in order[:lilu] if k.endswith(".kext") and k != "Lilu.kext"]
-        plugins = {"VirtualSMC.kext", "AppleALC.kext", "WhateverGreen.kext", "NVMeFix.kext",
-                   "CPUFriend.kext", "RestrictEvents.kext", "BrightnessKeys.kext"}
-        broken = [k for k in late if k in plugins]
+        broken = [k for k in late if k in LILU_DEPENDENTS]
         if broken:
             out.append(("critical", "Lilu loads after its plugins",
                         f"{', '.join(broken)} are injected before Lilu.kext and will "

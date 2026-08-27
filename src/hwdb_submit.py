@@ -14,6 +14,7 @@ address, or file paths are included.
 """
 
 import json
+import os
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -21,7 +22,14 @@ from datetime import date
 
 from hardware import HardwareProfile
 
-RELAY_URL = "https://hackmate-hwdb-relay.riftaway7.workers.dev"
+# Single Cloudflare Worker under one personal account — no built-in fallback
+# if it's down or its account lapses. Failure mode is safe by design: every
+# call in this module is best-effort and swallows its own exceptions (see
+# submit_log below), so a relay outage silently no-ops rather than blocking
+# or erroring the build. Forks/self-hosted deployments can point elsewhere
+# via HACKMATE_HWDB_RELAY_URL without touching source; set it empty to
+# disable submission outright (same effect as declining consent).
+RELAY_URL = os.environ.get("HACKMATE_HWDB_RELAY_URL", "https://hackmate-hwdb-relay.riftaway7.workers.dev")
 
 def _get_version() -> str:
     try:

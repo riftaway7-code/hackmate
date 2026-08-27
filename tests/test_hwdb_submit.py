@@ -85,5 +85,44 @@ class BuildLogContentTests(unittest.TestCase):
         self.assertNotIn("--- full EFI generation log ---", log)
 
 
+class RelayUrlOverrideTests(unittest.TestCase):
+    """RELAY_URL supports an env-var override so forks/self-hosted
+    deployments don't have to edit source, and an empty value disables
+    submission the same way declining consent does."""
+
+    def test_env_var_overrides_the_default_relay_url(self):
+        import importlib
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"HACKMATE_HWDB_RELAY_URL": "https://example.invalid/relay"}):
+            importlib.reload(hwdb_submit)
+        try:
+            self.assertEqual(hwdb_submit.RELAY_URL, "https://example.invalid/relay")
+        finally:
+            importlib.reload(hwdb_submit)  # restore the real default for later tests
+
+    def test_no_env_var_keeps_the_default_relay_url(self):
+        import importlib
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("HACKMATE_HWDB_RELAY_URL", None)
+            importlib.reload(hwdb_submit)
+        self.assertEqual(hwdb_submit.RELAY_URL, "https://hackmate-hwdb-relay.riftaway7.workers.dev")
+
+    def test_empty_relay_url_disables_submission_without_touching_the_network(self):
+        from unittest.mock import patch
+
+        with (
+            patch.object(hwdb_submit, "RELAY_URL", ""),
+            patch.object(hwdb_submit.urllib.request, "urlopen") as urlopen,
+        ):
+            hwdb_submit.submit_log(HardwareProfile(), "full", "some log text")
+
+        urlopen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

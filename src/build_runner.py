@@ -183,6 +183,29 @@ def run(params: dict, emit) -> dict:
                         log("  Reusing existing SMBIOS (serial preserved)", "ok")
                 except Exception as e:
                     log(f"  Could not read existing SMBIOS ({e}), generating fresh", "info")
+        elif not local_mode:
+            # A full (non-repair) build reformats the USB, which would wipe
+            # any prior config.plist — except when skip_format is set, where
+            # the old EFI (and its real SMBIOS identity) is still sitting
+            # right there. Regenerating without warning silently invalidates
+            # the existing USB port map and can reset app-license activation
+            # tied to the old serial/MLB.
+            existing_config = oc_dir / "config.plist"
+            if existing_config.exists():
+                try:
+                    with open(str(existing_config), "rb") as f:
+                        old_cfg = plistlib.load(f)
+                    old_serial = old_cfg.get("PlatformInfo", {}).get("Generic", {}).get("SystemSerialNumber", "")
+                    if old_serial and not old_serial.startswith("0000000"):
+                        log(
+                            f"  This EFI already has a real SMBIOS identity (serial {old_serial}). "
+                            "A fresh Build generates a new one, which invalidates any existing USB "
+                            "port map and can reset app-license activation tied to the old identity. "
+                            "Use Repair EFI instead if this system is already installed and working.",
+                            "warn",
+                        )
+                except Exception:
+                    pass
 
         if smbios is None:
             smbios = gen_smbios(profile)

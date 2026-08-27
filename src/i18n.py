@@ -1,3 +1,11 @@
+"""Minimal i18n layer — currently covers only the welcome-screen menu labels
+(the `welcome.*` keys below), not the rest of the TUI/GUI (hardware
+detection output, config editor, log checker, error messages, wizard flows
+are all English-only and not routed through t()). Treat this as a proof of
+concept / starting point, not full localization — if you're adding a new
+user-facing string elsewhere, it does not need to go through this module
+unless you're also extending real coverage to that screen."""
+
 import json
 from pathlib import Path
 from typing import Optional
@@ -13,6 +21,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "welcome.subtitle": "Automated OpenCore EFI builder — any hardware",
         "welcome.build_efi": "Build EFI",
         "welcome.build_efi_manual": "Build EFI (Manual)",
+        "welcome.pro": "HackMate Pro ($5)",
         "welcome.health_check": "EFI Health Check",
         "welcome.restore_efi": "Restore EFI",
         "welcome.download_recovery": "Download Recovery",

@@ -8,7 +8,14 @@ from pathlib import Path
 from dataclasses import dataclass
 
 
-MACRECOVERY_URL = "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Utilities/macrecovery/macrecovery.py"
+# Pinned to a specific OpenCorePkg release tag rather than `master` — this
+# runs unreviewed on every non-frozen install that doesn't already have
+# macrecovery.py cached (ensure_macrecovery() below), so tracking master
+# means an upstream change lands on users' machines with zero review here.
+# Bump deliberately when picking up a newer OpenCorePkg release; keep this in
+# sync with the tag build-exe.yml's "Download macrecovery.py" step fetches
+# and with whatever ocvalidate version .github/workflows/test.yml targets.
+MACRECOVERY_URL = "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/1.0.7/Utilities/macrecovery/macrecovery.py"
 
 def _macrecovery_path() -> Path:
     if getattr(sys, "frozen", False):
@@ -16,6 +23,11 @@ def _macrecovery_path() -> Path:
     return Path(__file__).parent / "macrecovery.py"
 
 MACRECOVERY_PATH = _macrecovery_path()
+
+# Bumped on every frozen-exe in-process download attempt so a stalled/abandoned
+# worker thread (still running after we've given up and returned) knows not to
+# clobber sys.argv/sys.stdout out from under a newer attempt when it finally exits.
+_download_generation = [0]
 
 
 @dataclass
@@ -337,6 +349,9 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
             activity = [time.monotonic()]
             result = {}
 
+            _download_generation[0] += 1
+            gen = _download_generation[0]
+
             def _run():
                 old_argv, old_stdout = sys.argv[:], sys.stdout
                 sys.argv = [str(script)] + script_args
@@ -349,8 +364,12 @@ def _download_recovery_once(version: MacOSVersion, dest: Path, progress_cb=None)
                 except Exception as e:
                     result["error"] = str(e)
                 finally:
-                    sys.stdout = old_stdout
-                    sys.argv = old_argv
+                    # Only restore globals if we're still the current attempt —
+                    # a stalled thread that's since been abandoned must not
+                    # stomp on a newer retry's sys.argv/sys.stdout.
+                    if _download_generation[0] == gen:
+                        sys.stdout = old_stdout
+                        sys.argv = old_argv
 
             worker = threading.Thread(target=_run, daemon=True)
             worker.start()

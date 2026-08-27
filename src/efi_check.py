@@ -11,6 +11,17 @@ import plistlib
 import struct
 from pathlib import Path
 
+# Kexts that plug into Lilu and silently no-op if loaded before it.
+# Shared with efi_health.py's standalone auditor — keep in one place so the
+# two checkers can't drift out of sync again (they previously did: efi_health
+# was missing NootedRed/NootedBlue/FeatureUnlock/CryptexFixup).
+LILU_DEPENDENTS = {
+    "VirtualSMC.kext", "AppleALC.kext", "WhateverGreen.kext",
+    "NVMeFix.kext", "CPUFriend.kext", "BrightnessKeys.kext",
+    "NootedRed.kext", "NootedBlue.kext", "RestrictEvents.kext",
+    "FeatureUnlock.kext", "CryptexFixup.kext",
+}
+
 def _is_valid_efi(path: Path) -> bool:
     """Check EFI binary has a valid PE/COFF header (MZ magic)."""
     try:
@@ -343,23 +354,17 @@ def check(efi_root: Path, profile) -> list[tuple[str, str]]:
                 f"Remove the entry from config.plist or redownload the driver."
             )
 
-    lilu_dependents = {
-        "VirtualSMC.kext", "AppleALC.kext", "WhateverGreen.kext",
-        "NVMeFix.kext", "CPUFriend.kext", "BrightnessKeys.kext",
-        "NootedRed.kext", "NootedBlue.kext", "RestrictEvents.kext",
-        "FeatureUnlock.kext", "CryptexFixup.kext",
-    }
     kext_order = [e.get("BundlePath", "").split("/")[0] for e in kernel_add]
     lilu_idx   = next((i for i, k in enumerate(kext_order) if k == "Lilu.kext"), None)
 
-    if lilu_idx is None and any(k in lilu_dependents for k in kext_order):
+    if lilu_idx is None and any(k in LILU_DEPENDENTS for k in kext_order):
         err(
             "Lilu.kext is missing but kexts that depend on it are present "
-            f"({', '.join(k for k in kext_order if k in lilu_dependents)}). "
+            f"({', '.join(k for k in kext_order if k in LILU_DEPENDENTS)}). "
             "These kexts will not load without Lilu."
         )
     elif lilu_idx is not None:
-        for dep in lilu_dependents:
+        for dep in LILU_DEPENDENTS:
             dep_idx = next((i for i, k in enumerate(kext_order) if k == dep), None)
             if dep_idx is not None and dep_idx < lilu_idx:
                 err(

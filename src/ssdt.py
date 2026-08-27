@@ -295,9 +295,19 @@ def _inspect_dsdt(dsdt_path: Path) -> dict:
 
     igpu_name = "GFX0" if b"GFX0" in data else ("IGPU" if b"IGPU" in data else "GFX0")
 
+    # Modern DSDTs declare CPUs as Device objects under \_SB (PR00, optionally
+    # nested under CPUS). Some older/OEM firmware instead uses the legacy
+    # ACPI Processor() object form (\_PR.CPU0) — a template SSDT-PLUG built
+    # against a blindly-guessed \_SB.PR00 path on one of those systems
+    # references a device that doesn't exist and silently does nothing.
     cpu_path = r"\_SB.PR00"
+    cpu_path_confident = True
     if b"PR00" not in data and b"CPUS" in data:
         cpu_path = r"\_SB.CPUS.PR00"
+    elif b"PR00" not in data and b"CPUS" not in data:
+        cpu_path_confident = False
+        if b"CPU0" in data:
+            cpu_path = r"\_PR.CPU0"
 
     has_gpi0 = b"GPI0" in data or b"GPIO" in data
 
@@ -306,6 +316,7 @@ def _inspect_dsdt(dsdt_path: Path) -> dict:
         "ec_name":   ec_name,
         "igpu_name": igpu_name,
         "cpu_path":  cpu_path,
+        "cpu_path_confident": cpu_path_confident,
         "has_gpi0":  has_gpi0,
         "has_gprw":  has_gprw,
         "has_acpi0007": has_acpi0007,
@@ -640,6 +651,20 @@ def generate(
                 "real DSDT next time), or run SSDTTime yourself "
                 "(https://github.com/corpnewt/SSDTTime) against this "
                 "machine's DSDT and add whichever SSDT-PLUG variant it "
+                "produces to EFI/OC/ACPI manually."
+            )
+            continue
+
+        if ssdt == "SSDT-PLUG" and not dsdt_info.get("cpu_path_confident", True):
+            results[ssdt] = (
+                "ERROR: this system's DSDT doesn't declare CPUs under the "
+                "usual \\_SB.PR00 path SSDT-PLUG templates target — it may "
+                "use the older ACPI Processor() object form instead, which "
+                "needs a different injection technique. Injecting a template "
+                "built against a guessed path does nothing silently. Retry "
+                "the build (SSDTTime may reach the real DSDT next time), or "
+                "run SSDTTime yourself (https://github.com/corpnewt/SSDTTime) "
+                "against this machine's DSDT and add the SSDT-PLUG.aml it "
                 "produces to EFI/OC/ACPI manually."
             )
             continue

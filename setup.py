@@ -8,8 +8,11 @@ import os
 from pathlib import Path
 from typing import Optional
 
+# Pinned to the confirmed-working major version — installing an untested
+# future major of textual silently on every fresh setup.py run is exactly
+# the kind of breakage this pin exists to avoid.
 DEPENDENCIES = [
-    ("textual", "textual"),
+    ("textual", "textual>=8.0.0,<9.0.0"),
 ]
 
 # hackmate/src uses PEP 604 unions (`X | None`), which need 3.10+ at runtime.

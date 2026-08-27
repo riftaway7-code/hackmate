@@ -207,6 +207,8 @@ Switch                { margin: 0 1 0 0; }
 .finding-info         { color: #888888; }
 .finding-context      { color: #2a2a2a; }
 #welcome-row          { height: 1fr; }
+.welcome-btn-row      { height: auto; }
+.welcome-btn          { width: 40; margin: 0 2 1 0; }
 #welcome-stats        { width: 26; padding: 1 0 0 3; border-left: solid #333333; }
 #health-targets       { height: 8; border: solid #333333; background: #111111; }
 #health-log           { height: 1fr; border: solid #222222; background: #0a0a0a; }
@@ -717,21 +719,43 @@ class WelcomeScreen(Screen):
                     Static(BANNER,     classes="title",    id="banner"),
                     Static(t("welcome.subtitle"), classes="info", id="subtitle"),
                     Static(""),
-                    Button(t("welcome.build_efi"),        id="start",      classes="primary"),
-                    Button(t("welcome.build_efi_manual"), id="manual",     classes="primary"),
-                    Button(t("welcome.health_check"),     id="health",     classes="primary"),
-                    Button(t("welcome.restore_efi"),      id="restore",    classes="primary"),
-                    Button(t("welcome.dual_boot"),        id="diskmap",    classes="primary"),
-                    Button(t("welcome.usb_mapping"),      id="usb_map",    classes="primary"),
-                    Button(t("welcome.edit_config"),      id="edit_cfg",   classes="primary"),
-                    Button(t("welcome.check_logs"),       id="check_logs", classes="primary"),
-                    Button(t("welcome.build_history"),    id="history",    classes="primary"),
-                    Button(
-                        t("welcome.sharing_on") if hwdb_submit.has_consented() else t("welcome.sharing_off"),
-                        id="hwdb_toggle", classes="primary"
+                    Horizontal(
+                        Button(t("welcome.build_efi"),        id="start",      classes="primary welcome-btn"),
+                        Button(t("welcome.build_efi_manual"), id="manual",     classes="primary welcome-btn"),
+                        classes="welcome-btn-row",
                     ),
-                    Button(t("welcome.language"),         id="language",   classes="primary"),
-                    Button(t("welcome.quit"),              id="quit",       classes="danger"),
+                    Horizontal(
+                        Button(t("welcome.health_check"),     id="health",     classes="primary welcome-btn"),
+                        Button(t("welcome.restore_efi"),      id="restore",    classes="primary welcome-btn"),
+                        classes="welcome-btn-row",
+                    ),
+                    Horizontal(
+                        Button(t("welcome.dual_boot"),        id="diskmap",    classes="primary welcome-btn"),
+                        Button(t("welcome.usb_mapping"),      id="usb_map",    classes="primary welcome-btn"),
+                        classes="welcome-btn-row",
+                    ),
+                    Horizontal(
+                        Button(t("welcome.edit_config"),      id="edit_cfg",   classes="primary welcome-btn"),
+                        Button(t("welcome.check_logs"),       id="check_logs", classes="primary welcome-btn"),
+                        classes="welcome-btn-row",
+                    ),
+                    Horizontal(
+                        Button(t("welcome.build_history"),    id="history",    classes="primary welcome-btn"),
+                        Button(
+                            t("welcome.sharing_on") if hwdb_submit.has_consented() else t("welcome.sharing_off"),
+                            id="hwdb_toggle", classes="primary welcome-btn"
+                        ),
+                        classes="welcome-btn-row",
+                    ),
+                    Horizontal(
+                        Button(t("welcome.language"),         id="language",   classes="primary welcome-btn"),
+                        Button(t("welcome.pro"),               id="pro",        classes="primary welcome-btn"),
+                        classes="welcome-btn-row",
+                    ),
+                    Horizontal(
+                        Button(t("welcome.quit"),              id="quit",       classes="danger welcome-btn"),
+                        classes="welcome-btn-row",
+                    ),
                     id="welcome-inner"
                 ),
                 Vertical(
@@ -779,8 +803,38 @@ class WelcomeScreen(Screen):
             self.app.push_screen(WelcomeScreen())
         elif event.button.id == "language":
             self.app.push_screen(LanguageScreen())
+        elif event.button.id == "pro":
+            self.app.push_screen(ProScreen())
         elif event.button.id == "quit":
             self.app.exit()
+
+class ProScreen(Screen):
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── HackMate Pro ─────────────────────────────────────────", classes="title"),
+                Static(""),
+                Static("  Stuck on your build, or just want it done right the first time?", classes="info"),
+                Static("  I'll personally help build your EFI — manually or automatically —", classes="info"),
+                Static("  one on one, for a flat $5 one-time fee (per hackintosh build).", classes="info"),
+                Static(""),
+                Static("  How it works:", classes="cfg-section"),
+                Static("  1. Send $5 Apple Cash to: rifthackmatepro@gmail.com", classes="info"),
+                Static("  2. DM riftaway7-code on the HackMate Discord with proof of payment", classes="info"),
+                Static("  3. I'll personally walk through your build with you until it boots", classes="info"),
+                Static(""),
+                Static("  discord.gg/VXWPX4Fpq", classes="info"),
+                Static(""),
+                Button("← Back", id="back", classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
 
 class HealthCheckScreen(Screen):
     """Audit any OpenCore EFI — a mounted partition, a USB, or a folder path."""

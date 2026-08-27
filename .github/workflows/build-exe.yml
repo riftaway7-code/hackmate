@@ -41,83 +41,41 @@ jobs:
 
       - name: Download macrecovery.py
         run: |
-          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/master/Utilities/macrecovery/macrecovery.py" -OutFile "src\macrecovery.py"
+          # Pinned to the same OpenCorePkg release tag as src/recovery.py's
+          # MACRECOVERY_URL and the ocvalidate version in test.yml — keep
+          # all three in sync when bumping.
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/acidanthera/OpenCorePkg/1.0.7/Utilities/macrecovery/macrecovery.py" -OutFile "src\macrecovery.py"
+
+      - name: Build hidden-import argument lists
+        id: hiddenimports
+        shell: pwsh
+        run: |
+          # Single source of truth: packaging/*.txt — see packaging/README.md.
+          # Used to be duplicated by hand across this file (twice) and
+          # HackMate-GUI.spec (which had already drifted out of sync).
+          function Build-Args($file) {
+            (Get-Content $file | Where-Object { $_.Trim() -ne "" } | ForEach-Object { "--hidden-import", $_.Trim() }) -join " "
+          }
+          $desktop = Build-Args "packaging\hiddenimports_desktop.txt"
+          $bridge  = Build-Args "packaging\hiddenimports_bridge.txt"
+          "desktop=$desktop" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "bridge=$bridge"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Build TUI EXE
+        shell: pwsh
         run: |
-          pyinstaller --onefile --name HackMate --paths src `
-            --hidden-import hardware `
-            --hidden-import kexts `
-            --hidden-import config_gen `
-            --hidden-import smbios `
-            --hidden-import recovery `
-            --hidden-import ssdt `
-            --hidden-import updater `
-            --hidden-import efi_check `
-            --hidden-import compat `
-            --hidden-import oc_log `
-            --hidden-import certifi `
-            --hidden-import hwdb_submit `
-            --hidden-import config_editor `
-            --hidden-import pci_ids `
-            --hidden-import pci_disable `
-            --hidden-import build_history `
-            --hidden-import i18n `
-            --hidden-import auto_usb_map `
-            --hidden-import discord_prompt `
-            --hidden-import dualboot `
-            --hidden-import efi_doctor `
-            --hidden-import efi_health `
-            --hidden-import log_checker `
-            --hidden-import partutil `
-            --hidden-import project_stats `
-            --hidden-import tkinter `
-            --hidden-import tkinter.filedialog `
-            --add-data "src\.version;." `
-            --add-data "src\.release_tag;." `
-            --add-data "src\macrecovery.py;." `
-            --add-data "src\amd_patches.plist;." `
-            --add-data "src\assets\acpi;assets\acpi" `
-            --add-data "src\assets\data;assets\data" `
-            src/hackmate.py
+          $hiddenimports = "${{ steps.hiddenimports.outputs.desktop }}"
+          $addData = '--add-data "src\.version;." --add-data "src\.release_tag;." --add-data "src\macrecovery.py;." --add-data "src\amd_patches.plist;." --add-data "src\assets\acpi;assets\acpi" --add-data "src\assets\data;assets\data"'
+          $cmd = "pyinstaller --onefile --name HackMate --paths src $hiddenimports $addData src/hackmate.py"
+          Invoke-Expression $cmd
 
       - name: Build Tkinter GUI EXE
+        shell: pwsh
         run: |
-          pyinstaller --onefile --windowed --uac-admin --name HackMate-GUI --paths src `
-            --hidden-import hardware `
-            --hidden-import kexts `
-            --hidden-import config_gen `
-            --hidden-import smbios `
-            --hidden-import recovery `
-            --hidden-import ssdt `
-            --hidden-import updater `
-            --hidden-import efi_check `
-            --hidden-import compat `
-            --hidden-import oc_log `
-            --hidden-import certifi `
-            --hidden-import hwdb_submit `
-            --hidden-import config_editor `
-            --hidden-import pci_ids `
-            --hidden-import pci_disable `
-            --hidden-import build_history `
-            --hidden-import i18n `
-            --hidden-import auto_usb_map `
-            --hidden-import discord_prompt `
-            --hidden-import dualboot `
-            --hidden-import efi_doctor `
-            --hidden-import efi_health `
-            --hidden-import log_checker `
-            --hidden-import partutil `
-            --hidden-import project_stats `
-            --hidden-import tkinter `
-            --hidden-import tkinter.filedialog `
-            --add-data "src\.version;." `
-            --add-data "src\.release_tag;." `
-            --add-data "src\macrecovery.py;." `
-            --add-data "src\amd_patches.plist;." `
-            --add-data "src\assets\acpi;assets\acpi" `
-            --add-data "src\assets\data;assets\data" `
-            src/hackmate_gui.py
+          $hiddenimports = "${{ steps.hiddenimports.outputs.desktop }}"
+          $addData = '--add-data "src\.version;." --add-data "src\.release_tag;." --add-data "src\macrecovery.py;." --add-data "src\amd_patches.plist;." --add-data "src\assets\acpi;assets\acpi" --add-data "src\assets\data;assets\data"'
+          $cmd = "pyinstaller --onefile --windowed --uac-admin --name HackMate-GUI --paths src $hiddenimports $addData src/hackmate_gui.py"
+          Invoke-Expression $cmd
 
       - name: Upload EXEs to release
         uses: softprops/action-gh-release@v2
@@ -141,34 +99,12 @@ jobs:
           flutter build windows --release
 
       - name: Build bridge EXE
+        shell: pwsh
         run: |
-          pyinstaller --onefile --console --name hackmate-bridge --paths src `
-            --hidden-import compat `
-            --hidden-import hardware `
-            --hidden-import config_editor `
-            --hidden-import dualboot `
-            --hidden-import efi_health `
-            --hidden-import hwdb_submit `
-            --hidden-import log_checker `
-            --hidden-import recovery `
-            --hidden-import build_history `
-            --hidden-import build_runner `
-            --hidden-import auto_usb_map `
-            --hidden-import config_gen `
-            --hidden-import efi_check `
-            --hidden-import kexts `
-            --hidden-import smbios `
-            --hidden-import ssdt `
-            --hidden-import pci_ids `
-            --hidden-import pci_disable `
-            --hidden-import certifi `
-            --add-data "src\.version;." `
-            --add-data "src\.release_tag;." `
-            --add-data "src\macrecovery.py;." `
-            --add-data "src\amd_patches.plist;." `
-            --add-data "src\assets\acpi;assets\acpi" `
-            --add-data "src\assets\data;assets\data" `
-            src/bridge.py
+          $hiddenimports = "${{ steps.hiddenimports.outputs.bridge }}"
+          $addData = '--add-data "src\.version;." --add-data "src\.release_tag;." --add-data "src\macrecovery.py;." --add-data "src\amd_patches.plist;." --add-data "src\assets\acpi;assets\acpi" --add-data "src\assets\data;assets\data"'
+          $cmd = "pyinstaller --onefile --console --name hackmate-bridge --paths src $hiddenimports $addData src/bridge.py"
+          Invoke-Expression $cmd
 
       - name: Bundle VC++ runtime DLLs (app-local deployment)
         shell: pwsh

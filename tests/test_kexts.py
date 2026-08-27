@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import config_gen
 import kexts
 from kexts import DB, check_kext_sources, alc_layout_is_known, get_alc_layout, fetch_opencore, OPENCORE_FALLBACK_URL
 from hardware import HardwareProfile
@@ -177,6 +178,129 @@ class OpenCoreDebugBuildTests(unittest.TestCase):
             path.unlink(missing_ok=True)
             cached = kexts._CACHE_ROOT / "opencore" / "OpenCore-1.0.7-DEBUG.zip"
             cached.unlink(missing_ok=True)
+
+
+class TouchpadKextSelectionTests(unittest.TestCase):
+    """select_kexts() used to re-detect the touchpad live on whatever machine
+    HackMate happened to be running on, ignoring profile.touchpad_type
+    entirely — so a manually-entered profile (built for different hardware
+    than the one running HackMate) silently got the wrong touchpad kext, and
+    a laptop's compat.detect_touchpad_type() diagnostic could disagree with
+    what was actually injected. select_kexts must trust the profile."""
+
+    def _selected_names(self, touchpad_type: str) -> set[str]:
+        profile = HardwareProfile(
+            cpu_vendor="intel",
+            cpu_generation=8,
+            platform="laptop",
+            touchpad_type=touchpad_type,
+        )
+        with (
+            patch.object(kexts, "_dmi", return_value=""),
+            patch.object(kexts, "_has_card_reader", return_value=False),
+        ):
+            return {entry.name for entry in kexts.select_kexts(profile)}
+
+    def test_manual_i2c_elan_profile_gets_the_elan_satellite_not_ps2(self):
+        names = self._selected_names("i2c_elan")
+
+        self.assertIn("VoodooI2C", names)
+        self.assertIn("VoodooI2CELAN", names)
+        self.assertNotIn("VoodooI2CSynaptics", names)
+
+    def test_manual_rmi_profile_gets_voodoormi_not_i2c(self):
+        names = self._selected_names("rmi")
+
+        self.assertIn("VoodooRMI", names)
+        self.assertNotIn("VoodooI2C", names)
+
+    def test_manual_i2c_alps_profile_gets_alpshid(self):
+        names = self._selected_names("i2c_alps")
+
+        self.assertIn("AlpsHID", names)
+        self.assertIn("VoodooI2C", names)
+
+    def test_plain_ps2_profile_gets_no_i2c_kexts(self):
+        names = self._selected_names("ps2")
+
+        self.assertNotIn("VoodooI2C", names)
+        self.assertNotIn("VoodooRMI", names)
+        self.assertIn("VoodooPS2Controller", names)
+
+
+class LoadOrderCompletenessTests(unittest.TestCase):
+    """A kext missing from config_gen.LOAD_ORDER silently sorts to the very end
+    of Kernel->Add (see _sort_kexts's order.get(name, 999) fallback) instead of
+    raising anything — the exact "ignores load order" failure mode reported
+    against generated EFIs. Every kext in the DB must have an explicit
+    position so this can't happen unnoticed again."""
+
+    def test_every_kext_in_db_has_an_explicit_load_order_position(self):
+        missing = sorted(set(DB) - set(config_gen.LOAD_ORDER))
+        self.assertEqual(
+            missing, [],
+            f"kexts missing from LOAD_ORDER (they will sort last, silently): {missing}"
+        )
+
+    def test_load_order_has_no_duplicate_entries(self):
+        seen = set()
+        duplicates = sorted({
+            name for name in config_gen.LOAD_ORDER
+            if name in seen or seen.add(name)
+        })
+        self.assertEqual(duplicates, [], f"duplicate LOAD_ORDER entries: {duplicates}")
+
+
+class LoadOrderDependencyTests(unittest.TestCase):
+    """Base patcher / satellite relationships the Dortania guide requires:
+    Lilu-dependent plugins must load after Lilu, and I2C touchpad satellites
+    must load after the VoodooI2C base kext they attach to."""
+
+    def _position(self, name: str) -> int:
+        return config_gen.LOAD_ORDER.index(name)
+
+    def test_lilu_loads_before_its_plugins(self):
+        lilu_plugins = [
+            "WhateverGreen", "AppleALC", "RestrictEvents", "FeatureUnlock",
+            "CPUFriend", "NVMeFix", "DebugEnhancer", "CryptexFixup",
+            "NootedRed", "NootRX", "HibernationFixup",
+        ]
+        lilu_pos = self._position("Lilu")
+        for plugin in lilu_plugins:
+            with self.subTest(plugin=plugin):
+                self.assertLess(lilu_pos, self._position(plugin))
+
+    def test_i2c_satellites_load_after_their_base_kext(self):
+        base_pos = self._position("VoodooI2C")
+        satellites = [
+            "VoodooI2CHID", "VoodooI2CSynaptics", "VoodooI2CELAN",
+            "VoodooI2CAtmel", "VoodooI2CFTE", "VoodooI2CGoodix", "AlpsHID",
+        ]
+        for satellite in satellites:
+            with self.subTest(satellite=satellite):
+                self.assertLess(base_pos, self._position(satellite))
+
+
+class ZipExtractionSafetyTests(unittest.TestCase):
+    def test_member_path_escaping_extract_dir_is_skipped(self):
+        import tempfile
+        import zipfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            zip_path = tmp_path / "evil.zip"
+            extract_dir = tmp_path / "extract"
+            extract_dir.mkdir()
+
+            with zipfile.ZipFile(zip_path, "w") as z:
+                z.writestr("Good.kext/Contents/Info.plist", "<plist/>")
+                z.writestr("../../evil.txt", "should not escape extract_dir")
+
+            kexts._extract_zip(zip_path, extract_dir)
+
+            self.assertTrue((extract_dir / "Good.kext" / "Contents" / "Info.plist").exists())
+            self.assertFalse((tmp_path.parent / "evil.txt").exists())
+            self.assertFalse((tmp_path / "evil.txt").exists())
 
 
 if __name__ == "__main__":

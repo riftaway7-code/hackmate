@@ -88,6 +88,59 @@ class InstallerAudioSafetyTests(unittest.TestCase):
         self.assertIn("VoodooHDA cannot be injected from this installer EFI", titles)
 
 
+class SequoiaVmmSpoofSafetyTests(unittest.TestCase):
+    """revpatch=sbvmm fakes a VM identity to dodge Sequoia+'s board-ID check
+    on hardware Apple dropped graphics support for. Applying it on hardware
+    WhateverGreen is actively giving real acceleration to (e.g. Kaby Lake-R
+    UHD 620) fights the real patches with a fake identity — a documented
+    cause of early graphics-stack kernel panics on real hardware."""
+
+    def _boot_args(self, profile: HardwareProfile, macos_major: int) -> str:
+        nvram = config_gen._nvram_section(profile, 1, macos_major=macos_major)
+        return nvram["Add"]["7C436110-AB2A-4BBB-A880-FE41995C9F82"]["boot-args"]
+
+    def test_kaby_lake_r_with_native_igpu_does_not_get_vmm_spoof_on_sequoia(self):
+        profile = HardwareProfile(
+            cpu_vendor="intel",
+            cpu_generation=8,
+            gpu_vendor="intel",
+            gpu_name="Intel UHD Graphics 620",
+            platform="laptop",
+        )
+
+        boot_args = self._boot_args(profile, macos_major=15).split()
+
+        self.assertNotIn("revpatch=sbvmm", boot_args)
+        self.assertNotIn("-lilubetaall", boot_args)
+
+    def test_tiger_lake_with_no_igpu_driver_gets_vmm_spoof_on_sequoia(self):
+        profile = HardwareProfile(
+            cpu_vendor="intel",
+            cpu_generation=11,
+            gpu_vendor="intel",
+            gpu_name="Intel Iris Xe Graphics",
+            platform="laptop",
+        )
+
+        boot_args = self._boot_args(profile, macos_major=15).split()
+
+        self.assertIn("revpatch=sbvmm", boot_args)
+        self.assertIn("-lilubetaall", boot_args)
+
+    def test_pre_sequoia_target_never_gets_the_spoof_regardless_of_gpu(self):
+        profile = HardwareProfile(
+            cpu_vendor="intel",
+            cpu_generation=11,
+            gpu_vendor="intel",
+            gpu_name="Intel Iris Xe Graphics",
+            platform="laptop",
+        )
+
+        boot_args = self._boot_args(profile, macos_major=14).split()
+
+        self.assertNotIn("revpatch=sbvmm", boot_args)
+
+
 class UefiOutputSafetyTests(unittest.TestCase):
     def test_gpu_less_amd_desktop_enables_gop_passthrough(self):
         profile = HardwareProfile(

@@ -628,6 +628,59 @@ class WindowsNetworkDetectionTests(unittest.TestCase):
 
 
 class WindowsGpuDetectionTests(unittest.TestCase):
+    def test_primary_gpu_pci_device_and_function_are_captured(self):
+        controllers = [{
+            "Name": "NVIDIA GeForce RTX 4070",
+            "PNPDeviceID": r"PCI\VEN_10DE&DEV_2786&SUBSYS_00000000",
+            "BusNumber": 1,
+            "Address": (0x1A << 16) | 3,
+        }]
+        profile = hardware.HardwareProfile()
+
+        with patch.object(hardware, "_ps", return_value=json.dumps(controllers)):
+            hardware._detect_gpu_windows(profile)
+
+        self.assertEqual(profile.gpu_vendor, "nvidia")
+        self.assertEqual(profile.gpu_pci_device, 0x1A)
+        self.assertEqual(profile.gpu_pci_function, 3)
+
+    def test_pci_address_follows_the_selected_primary_gpu(self):
+        controllers = [
+            {
+                "Name": "NVIDIA GeForce GTX 1050",
+                "PNPDeviceID": r"PCI\VEN_10DE&DEV_1C8D&SUBSYS_00000000",
+                "BusNumber": 1,
+                "Address": (0x1B << 16),
+            },
+            {
+                "Name": "Intel(R) HD Graphics 630",
+                "PNPDeviceID": r"PCI\VEN_8086&DEV_591B&SUBSYS_00000000",
+                "BusNumber": 0,
+                "Address": (0x02 << 16),
+            },
+        ]
+        profile = hardware.HardwareProfile()
+
+        with patch.object(hardware, "_ps", return_value=json.dumps(controllers)):
+            hardware._detect_gpu_windows(profile)
+
+        self.assertEqual(profile.gpu_vendor, "intel")
+        self.assertEqual(profile.gpu_pci_device, 0x02)
+        self.assertEqual(profile.gpu_pci_function, 0)
+
+    def test_invalid_windows_pci_address_is_rejected(self):
+        for address in (None, 0xFFFFFFFF, (0x20 << 16), (0x01 << 16) | 8):
+            with self.subTest(address=address):
+                self.assertEqual(
+                    hardware._decode_windows_pci_address(address), (-1, -1)
+                )
+
+    def test_gpu_pci_fields_default_to_unknown(self):
+        profile = hardware.HardwareProfile()
+
+        self.assertEqual(profile.gpu_pci_device, -1)
+        self.assertEqual(profile.gpu_pci_function, -1)
+
     def test_intel_device_id_follows_selected_igpu_when_dgpu_is_listed_first(self):
         controllers = [
             {

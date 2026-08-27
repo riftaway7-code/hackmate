@@ -99,6 +99,16 @@ All downloads are performed over HTTPS. We do not verify checksums for
 third-party tools at this time — this is a known limitation and a planned
 improvement.
 
+**Opt-in hardware log submission** (`src/hwdb_submit.py`) uploads to a single
+Cloudflare Worker (`hackmate-hwdb-relay.riftaway7.workers.dev`) under one
+personal account — there's no fallback if that account or Worker goes down.
+This has no user-facing impact: submission is entirely best-effort, requires
+explicit consent, and every failure (relay down, network error, anything) is
+caught and silently ignored — it never blocks or errors a build. The relay
+URL can be overridden via the `HACKMATE_HWDB_RELAY_URL` environment
+variable (set it empty to disable submission outright) for forks or
+self-hosted deployments.
+
 ---
 
 ## Auto-Updater Security

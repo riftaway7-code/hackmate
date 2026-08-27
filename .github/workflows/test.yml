@@ -20,8 +20,26 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Run unit tests
-        run: python3 -m unittest discover -s tests -v
+      - name: Install coverage
+        run: pip install coverage
+
+      - name: Run unit tests with coverage
+        run: |
+          python3 -m coverage run --source=src -m unittest discover -s tests -v
+
+      - name: Coverage report
+        run: |
+          # hackmate.py/hackmate_gui.py are the TUI/GUI entrypoints (harder to
+          # unit test, tracked as a lower-priority gap — see CONTRIBUTING.md)
+          # and macrecovery.py is vendored third-party code overwritten from
+          # upstream at build time, not ours to cover. Omitting them keeps
+          # this number meaningful instead of permanently pinned near-zero.
+          # 50% is a floor below the measured baseline (~54% at the time this
+          # was added), not a target — raise it as real coverage grows, don't
+          # lower it to make a red run green.
+          python3 -m coverage report --include="src/*" \
+            --omit="src/hackmate.py,src/hackmate_gui.py,src/macrecovery.py" \
+            --fail-under=50
 
       - name: Generate representative configs
         run: python3 tests/generate_validation_configs.py /tmp/hackmate-configs

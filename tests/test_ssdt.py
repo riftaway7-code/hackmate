@@ -15,6 +15,8 @@ _ACPI0007_DSDT = (
     b"{\n    Name (_HID, \"ACPI0007\")\n}\n"
 )
 _LEGACY_DSDT = b"DSDT\x00\x00\x00\x00...Processor (PR00, 0x00, 0x00000410, 0x06)\n"
+_CPU0_PROCESSOR_DSDT = b"DSDT\x00\x00\x00\x00...Processor (CPU0, 0x00, 0x00000410, 0x06)\n"
+_NEITHER_PR00_NOR_CPU0_DSDT = b"DSDT\x00\x00\x00\x00...totally unrelated ACPI content\n"
 
 
 class Acpi0007DetectionTests(unittest.TestCase):
@@ -63,6 +65,74 @@ class Acpi0007PlugFallbackTests(unittest.TestCase):
     def test_legacy_dsdt_still_gets_a_template_generated_ssdt_plug(self):
         results = self._generate(_LEGACY_DSDT)
 
+        self.assertFalse(results["SSDT-PLUG"].startswith("ERROR"))
+
+
+class LegacyCpuScopeDetectionTests(unittest.TestCase):
+    """Regression coverage for the \\_PR.CPU0 legacy Processor()-object gap:
+    a DSDT that declares neither PR00 nor CPUS must not silently fall back
+    to a guessed \\_SB.PR00 SSDT-PLUG that references a device that isn't
+    actually there."""
+
+    def _inspect(self, raw: bytes) -> dict:
+        # NamedTemporaryFile(delete=False) + explicit close: on Windows a
+        # second handle can't read the file while the writer's handle is
+        # still open, unlike POSIX.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "DSDT.aml"
+            path.write_bytes(raw)
+            return ssdt._inspect_dsdt(path)
+
+    def test_modern_pr00_dsdt_is_confident(self):
+        info = self._inspect(_LEGACY_DSDT)  # contains literal "PR00"
+        self.assertTrue(info["cpu_path_confident"])
+        self.assertEqual(info["cpu_path"], r"\_SB.PR00")
+
+    def test_cpus_nested_dsdt_is_confident(self):
+        info = self._inspect(b"...CPUS...no pr zero zero here...")
+        self.assertTrue(info["cpu_path_confident"])
+        self.assertEqual(info["cpu_path"], r"\_SB.CPUS.PR00")
+
+    def test_legacy_cpu0_processor_object_is_not_confident(self):
+        info = self._inspect(_CPU0_PROCESSOR_DSDT)
+        self.assertFalse(info["cpu_path_confident"])
+        self.assertEqual(info["cpu_path"], r"\_PR.CPU0")
+
+    def test_neither_form_present_is_not_confident(self):
+        info = self._inspect(_NEITHER_PR00_NOR_CPU0_DSDT)
+        self.assertFalse(info["cpu_path_confident"])
+
+
+class LegacyCpuScopePlugFallbackTests(unittest.TestCase):
+    def setUp(self):
+        self.acpi_dir = Path(tempfile.mkdtemp(prefix="hackmate-test-acpi-"))
+        self.dsdt_file = Path(tempfile.mkdtemp(prefix="hackmate-test-dsdt-")) / "DSDT.aml"
+
+    def tearDown(self):
+        shutil.rmtree(self.acpi_dir, ignore_errors=True)
+        shutil.rmtree(self.dsdt_file.parent, ignore_errors=True)
+
+    def _generate(self, dsdt_bytes: bytes) -> dict:
+        self.dsdt_file.write_bytes(dsdt_bytes)
+        with (
+            patch.object(ssdt, "_ensure_ssdttime", side_effect=Exception("SSDTTime unavailable")),
+            patch.object(ssdt, "get_dsdt", return_value=self.dsdt_file),
+        ):
+            return ssdt.generate(
+                needed=["SSDT-PLUG"],
+                acpi_dir=self.acpi_dir,
+                tmp=self.dsdt_file.parent,
+                cpu_generation=8,
+            )
+
+    def test_legacy_cpu0_dsdt_reports_error_not_a_silently_wrong_ssdt(self):
+        results = self._generate(_CPU0_PROCESSOR_DSDT)
+
+        self.assertTrue(results["SSDT-PLUG"].startswith("ERROR"))
+        self.assertFalse((self.acpi_dir / "SSDT-PLUG.aml").exists())
+
+    def test_modern_pr00_dsdt_still_gets_a_template_generated_ssdt_plug(self):
+        results = self._generate(_LEGACY_DSDT)  # contains literal "PR00"
         self.assertFalse(results["SSDT-PLUG"].startswith("ERROR"))
 
 

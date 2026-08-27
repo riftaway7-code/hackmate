@@ -1,8 +1,64 @@
+import json
 import random
 import uuid
 import string
 from dataclasses import dataclass
+from pathlib import Path
+from compat import real_home
 from hardware import HardwareProfile
+
+# random (Mersenne Twister) is intentional here, not a security oversight —
+# these values only need to *look like* plausible Apple serials/MLBs/UUIDs,
+# not be unpredictable. Swapping to `secrets` would change output format
+# (alphabet/length assumptions below) without adding any real benefit.
+
+# Local dedup: GenSMBIOS's own issue tracker documents generated serials
+# colliding across separate runs (github.com/corpnewt/GenSMBIOS/issues/2).
+# The random space per model is large enough that a collision within one
+# install is astronomically unlikely, but tracking what this machine has
+# already issued costs nothing and closes the gap entirely.
+_SEEN_FILE = real_home() / ".hackmate" / "used_smbios.json"
+_SEEN_HISTORY_CAP = 500
+_MAX_GENERATION_ATTEMPTS = 20
+
+
+def _load_seen() -> dict:
+    try:
+        data = json.loads(_SEEN_FILE.read_text())
+        return {
+            "serials": set(data.get("serials", [])),
+            "mlbs": set(data.get("mlbs", [])),
+        }
+    except Exception:
+        return {"serials": set(), "mlbs": set()}
+
+
+def _remember(kind: str, value: str) -> None:
+    seen = _load_seen()
+    seen[kind].add(value)
+    try:
+        _SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SEEN_FILE.write_text(json.dumps({
+            "serials": list(seen["serials"])[-_SEEN_HISTORY_CAP:],
+            "mlbs": list(seen["mlbs"])[-_SEEN_HISTORY_CAP:],
+        }))
+    except Exception:
+        pass  # best-effort — a write failure shouldn't block SMBIOS generation
+
+
+def _unique(kind: str, generate_one) -> str:
+    """Call generate_one() until it produces a value this machine hasn't
+    issued before (or we give up after _MAX_GENERATION_ATTEMPTS and just use
+    the last one — an eventual collision after that many retries would mean
+    the random space itself is exhausted, not a dedup failure)."""
+    seen = _load_seen()[kind]
+    value = generate_one()
+    for _ in range(_MAX_GENERATION_ATTEMPTS - 1):
+        if value not in seen:
+            break
+        value = generate_one()
+    _remember(kind, value)
+    return value
 
 @dataclass
 class SMBIOSData:
@@ -92,7 +148,7 @@ def _rand_hex(n: int) -> str:
 def _rand_upper(n: int) -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
 
-def generate_serial(model: str) -> str:
+def _generate_serial_once(model: str) -> str:
     factory = random.choice(FACTORIES)
 
     # pick year/week that makes sense for this model generation
@@ -107,15 +163,21 @@ def generate_serial(model: str) -> str:
 
     return f"{factory}{year_code}{week}{unique}{suffix}"
 
+def generate_serial(model: str) -> str:
+    return _unique("serials", lambda: _generate_serial_once(model))
+
 MLB_LENGTH = 17
 
-def generate_mlb(model: str) -> str:
+def _generate_mlb_once(model: str) -> str:
     prefixes = MLB_PREFIXES.get(model)
     if prefixes:
         prefix = random.choice(prefixes)
         return f"{prefix}{_rand_upper(MLB_LENGTH - len(prefix))}"
 
     return f"C02{_rand_upper(8)}HACD{_rand_upper(MLB_LENGTH - 15)}"
+
+def generate_mlb(model: str) -> str:
+    return _unique("mlbs", lambda: _generate_mlb_once(model))
 
 def generate_uuid() -> str:
     return str(uuid.uuid4()).upper()

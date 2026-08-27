@@ -3017,9 +3017,10 @@ class InstallScreen(Screen):
             except Exception:
                 pass
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "back":
-            self.app.pop_screen()
+    # NOTE: button handling for this screen lives in the on_button_pressed
+    # defined earlier in the class (it handles both "advanced" and "back"). A
+    # second definition here shadowed it and silently broke the "Advanced ▶"
+    # toggle on the build screen.
 
 class ConfigEditorUSBScreen(Screen):
     """Pick which USB / config.plist to edit."""

@@ -256,8 +256,15 @@ def _kext_entry(kext: KextEntry, enabled: bool = True) -> dict:
 def _required_ssdts(profile: HardwareProfile, kexts: list[KextEntry]) -> list[str]:
     ssdts = []
     gen = profile.cpu_generation
-    kext_names = {k.name for k in kexts}
-    has_i2c = any(k.name.startswith("VoodooI2C") for k in kexts)
+    # An I2C trackpad needs SSDT-GPI0 (GPIO pinning) + SSDT-XOSI. Key this off
+    # BOTH the selected kexts and the scanned touchpad type: when the USB is
+    # built from a machine that isn't the target, the live touchpad probe in
+    # kext selection often can't see the trackpad and picks PS/2 — but the scan
+    # may still have identified it as I2C. Missing SSDT-GPI0 = dead trackpad.
+    i2c_trackpad = (
+        any(k.name.startswith(("VoodooI2C", "VoodooRMI")) for k in kexts)
+        or (profile.platform == "laptop" and profile.touchpad_type == "i2c")
+    )
 
     # CPU power management — always
     ssdts.append("SSDT-PLUG")
@@ -287,7 +294,7 @@ def _required_ssdts(profile: HardwareProfile, kexts: list[KextEntry]) -> list[st
         ssdts.append("SSDT-PMC")
 
     # I2C GPIO — needed for I2C trackpad
-    if has_i2c:
+    if i2c_trackpad:
         ssdts.append("SSDT-GPI0")
         ssdts.append("SSDT-XOSI")
 

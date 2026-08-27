@@ -9,7 +9,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 from hardware import HardwareProfile
-from compat import IS_WINDOWS, http_get, real_home
+from compat import IS_WINDOWS, IS_MACOS, http_get, real_home
 
 _CACHE_ROOT = real_home() / ".hackmate" / "cache"
 
@@ -239,25 +239,50 @@ def _dmi(field: str) -> str:
     except Exception:
         return ""
 
-def _detect_touchpad_type() -> str:
+def _detect_touchpad_type(profile: "HardwareProfile | None" = None) -> str:
+    """Fine-grained trackpad bus/vendor for kext selection: 'ps2', 'rmi',
+    'i2c_hid', 'i2c_elan', 'i2c_synaptics', ...
+
+    The live probes below can only see the trackpad when the build host *is*
+    the target machine. When they come up empty but the scan already concluded
+    the target has an I2C trackpad (profile.touchpad_type == 'i2c'), trust that
+    and fall back to the generic 'i2c_hid' satellite rather than silently
+    handing the laptop PS/2 kexts and dropping SSDT-GPI0.
+    """
+    fine = _probe_touchpad_type()
+    if fine == "ps2" and profile is not None and getattr(profile, "touchpad_type", "") == "i2c":
+        return "i2c_hid"
+    return fine
+
+
+def _probe_touchpad_type() -> str:
+    if IS_MACOS:
+        try:
+            io = subprocess.run(["ioreg", "-l"], capture_output=True, text=True, timeout=10).stdout.lower()
+        except Exception:
+            io = ""
+        if "elan" in io and ("i2c" in io or "hid" in io):     return "i2c_elan"
+        if "synaptics" in io and ("i2c" in io or "hid" in io): return "i2c_synaptics"
+        if any(k in io for k in ("voodooi2c", "applehsspihiddriver", "pnp0c50", "acpi0c50", "i2c-hid")):
+            return "i2c_hid"
+        return "ps2"
     if IS_WINDOWS:
+        # Widened: also pull every device whose HardwareID/InstanceId carries the
+        # I2C-HID ACPI id (PNP0C50 / ACPI0C50). Filtering only on a name match of
+        # 'touchpad|trackpad|synaptics|elan|alps' missed generic-named precision
+        # touchpads ("I2C HID Device"), which then got PS/2 kexts and no GPI0.
         try:
             out = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
-                 "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty Name"],
+                 "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' -or "
+                 "($_.PNPDeviceID -match 'PNP0C50|ACPI0C50') } | ForEach-Object { \"$($_.Name) $($_.PNPDeviceID)\" }"],
                 capture_output=True, text=True, timeout=10
             ).stdout.lower()
         except Exception:
             out = ""
-        try:
-            pnp = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -match 'touchpad|trackpad|synaptics|elan|alps' } | Select-Object -ExpandProperty PNPDeviceID"],
-                capture_output=True, text=True, timeout=10
-            ).stdout.lower()
-        except Exception:
-            pnp = ""
-        combined = out + pnp
+        combined = out
+        if "pnp0c50" in combined or "acpi0c50" in combined:
+            combined += " i2c-hid"
     else:
         dmesg = subprocess.run(["dmesg"], capture_output=True, text=True).stdout.lower()
         i2c = subprocess.run(["find", "/sys/bus/i2c/devices", "-name", "name"],
@@ -377,7 +402,7 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     vendor = _dmi("sys_vendor") or _dmi("board_vendor")
     board_name = _dmi("board_name")
-    tp = _detect_touchpad_type() if profile.platform == "laptop" else "none"
+    tp = _detect_touchpad_type(profile) if profile.platform == "laptop" else "none"
     legacy = _is_legacy(profile)
 
     add("Lilu")
@@ -894,7 +919,7 @@ if __name__ == "__main__":
     profile = scan()
     kexts = select_kexts(profile)
     vendor = _dmi("sys_vendor") or _dmi("board_vendor")
-    tp = _detect_touchpad_type() if profile.platform == "laptop" else "n/a"
+    tp = _detect_touchpad_type(profile) if profile.platform == "laptop" else "n/a"
 
     print(f"\n{'─'*65}")
     print(f"  HackMate Kext Selector  —  {len(DB)} kexts in database")

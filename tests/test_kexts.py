@@ -34,6 +34,46 @@ class CpuTopologyRebuildSelectionTests(unittest.TestCase):
         self.assertNotIn("CpuTopologyRebuild", names)
 
 
+class I2cTrackpadKextSelectionTests(unittest.TestCase):
+    def _selected_names(self, profile: HardwareProfile) -> set[str]:
+        with (
+            patch.object(kexts, "_dmi", return_value=""),
+            patch.object(kexts, "_has_card_reader", return_value=False),
+            # simulate a build host that can't see the target laptop's trackpad
+            patch.object(kexts, "_probe_touchpad_type", return_value="ps2"),
+        ):
+            return {entry.name for entry in kexts.select_kexts(profile)}
+
+    def test_scan_says_i2c_but_probe_fails_still_selects_voodooi2c(self):
+        profile = HardwareProfile(
+            cpu_vendor="intel", cpu_generation=8, platform="laptop",
+            touchpad_type="i2c",
+        )
+
+        names = self._selected_names(profile)
+
+        self.assertIn("VoodooI2C", names)
+        self.assertIn("VoodooI2CHID", names)
+        self.assertNotIn("VoodooPS2Trackpad", names)
+
+    def test_probe_result_wins_when_scan_has_no_touchpad_type(self):
+        profile = HardwareProfile(
+            cpu_vendor="intel", cpu_generation=8, platform="laptop",
+        )
+
+        names = self._selected_names(profile)
+
+        self.assertNotIn("VoodooI2C", names)
+        self.assertIn("VoodooPS2Controller", names)
+
+    def test_detect_touchpad_type_floors_on_scan(self):
+        profile = HardwareProfile(platform="laptop", touchpad_type="i2c")
+        with patch.object(kexts, "_probe_touchpad_type", return_value="ps2"):
+            self.assertEqual(kexts._detect_touchpad_type(profile), "i2c_hid")
+        with patch.object(kexts, "_probe_touchpad_type", return_value="i2c_elan"):
+            self.assertEqual(kexts._detect_touchpad_type(profile), "i2c_elan")
+
+
 class AmdGpuKextSelectionTests(unittest.TestCase):
     def _selected_names(self, profile: HardwareProfile) -> set[str]:
         with (

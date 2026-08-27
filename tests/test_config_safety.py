@@ -210,6 +210,25 @@ class RequiredSsdtSafetyTests(unittest.TestCase):
         self.assertIn("SSDT-EC-USBX", ssdts)
         self.assertNotIn("SSDT-USBX", ssdts)
 
+    def test_i2c_trackpad_from_scan_gets_gpi0_even_without_a_voodooi2c_kext(self):
+        # kext auto-selection can miss the trackpad when the USB is built from
+        # another machine; the scan's touchpad_type must still pull in SSDT-GPI0.
+        profile = HardwareProfile(
+            cpu_generation=8, platform="laptop", touchpad_type="i2c"
+        )
+
+        ssdts = config_gen._required_ssdts(profile, [])
+
+        self.assertIn("SSDT-GPI0", ssdts)
+        self.assertIn("SSDT-XOSI", ssdts)
+
+    def test_ps2_laptop_does_not_get_gpi0(self):
+        profile = HardwareProfile(
+            cpu_generation=8, platform="laptop", touchpad_type="ps2"
+        )
+
+        self.assertNotIn("SSDT-GPI0", config_gen._required_ssdts(profile, []))
+
     def test_modern_amd_desktop_does_not_get_intel_chipset_ssdts(self):
         for generation in (11, 12):
             with self.subTest(generation=generation):

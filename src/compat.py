@@ -276,14 +276,19 @@ def detect_touchpad_type() -> str:
     """Returns 'ps2', 'i2c', or 'none'"""
     if IS_WINDOWS:
         try:
+            # PNP0C50 / ACPI0C50 is the ACPI hardware ID every I2C-HID touchpad
+            # exposes, whatever its FriendlyName ("I2C HID Device", "HID-compliant
+            # touch pad", an OEM string, …). Matching the HID beats matching the
+            # name — generic-named precision touchpads were slipping through and
+            # getting PS/2 kexts + no SSDT-GPI0.
             i2c_hit = subprocess.run(
                 ["powershell", "-NoProfile", "-Command",
-                 "if (Get-PnpDevice -Class HIDClass -PresentOnly | Where-Object { "
-                 "$_.InstanceId -like 'ACPI\\*' -and $_.FriendlyName -match 'touch|pad' "
-                 "}) { 'i2c' }"],
+                 "if (Get-PnpDevice -PresentOnly | Where-Object { "
+                 "($_.HardwareID -join ' ') -match 'PNP0C50|ACPI0C50' -or "
+                 "$_.InstanceId -match 'PNP0C50|ACPI0C50' }) { 'i2c' }"],
                 capture_output=True, text=True, timeout=8
-            ).stdout.strip()
-            if i2c_hit == "i2c":
+            ).stdout.strip().lower()
+            if "i2c" in i2c_hit:
                 return "i2c"
 
             raw = subprocess.run(
@@ -291,11 +296,26 @@ def detect_touchpad_type() -> str:
                  "Get-PnpDevice | Where-Object {$_.Class -eq 'HIDClass' -or $_.Class -eq 'Mouse'} | Select-Object -ExpandProperty FriendlyName"],
                 capture_output=True, text=True, timeout=8
             ).stdout.lower()
+            if "i2c hid" in raw or "i2c-hid" in raw:
+                return "i2c"
             if "ps/2" in raw or "synaptics" in raw or "alps" in raw or "elantech" in raw:
                 return "ps2"
             return "none"
         except Exception:
             return "ps2"
+    if IS_MACOS:
+        # Best effort — only meaningful when the build host is the target Mac.
+        try:
+            io = subprocess.run(
+                ["ioreg", "-l"], capture_output=True, text=True, timeout=10
+            ).stdout.lower()
+        except Exception:
+            io = ""
+        if any(k in io for k in ("voodooi2c", "applehsspihiddriver", "pnp0c50", "acpi0c50", "i2c-hid")):
+            return "i2c"
+        if any(k in io for k in ("applespi", "voodoops2", "ps2", "atkbd")):
+            return "ps2"
+        return "ps2"
     # Linux: check dmesg for I2C HID devices
     try:
         dmesg = subprocess.run(

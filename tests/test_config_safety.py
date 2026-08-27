@@ -35,11 +35,19 @@ class InstallerAudioSafetyTests(unittest.TestCase):
         self.assertIn("AppleALC", names)
         self.assertNotIn("VoodooHDA", names)
 
-    def test_unknown_codec_does_not_inject_voodoohda(self):
+    def test_unknown_codec_still_ships_applealc_but_never_voodoohda(self):
+        # AppleALC is inert when it can't match the codec, so injecting it is
+        # strictly better than an EFI with no audio kext at all. VoodooHDA must
+        # never be prelinked from an installer EFI.
         names = self._selected_names("Conexant CX20751")
 
-        self.assertNotIn("AppleALC", names)
+        self.assertIn("AppleALC", names)
         self.assertNotIn("VoodooHDA", names)
+
+    def test_generic_realtek_string_still_ships_applealc(self):
+        # Windows detection falls back to the literal "Realtek" when it can't
+        # read the exact codec — that must not drop AppleALC.
+        self.assertIn("AppleALC", self._selected_names("Realtek"))
 
     def test_missing_codec_keeps_safe_applealc_default(self):
         names = self._selected_names("")

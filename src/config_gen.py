@@ -172,7 +172,7 @@ LOAD_ORDER = [
     "WhateverGreen", "NootedRed", "NootRX",
     "AppleALC", "VoodooHDA", "CodecCommander",
     "RestrictEvents", "FeatureUnlock", "CryptexFixup",
-    "CPUFriend",
+    "CPUFriend", "IntelMKLFixup",
     "AMDRyzenCPUPowerManagement", "SMCAMDProcessor",
     "SMCBatteryManager", "SMCProcessor", "SMCSuperIO", "SMCLightSensor",
     "SMCDellSensors", "SMCRadeonGPU",
@@ -185,8 +185,8 @@ LOAD_ORDER = [
     "ECEnabler", "ACPIBatteryManager",
     "NullCPUPowerManagement", "CpuTopologyRebuild",
     "AmdTSCSync", "ForgedInvariant", "VoodooTSCSync",
-    "HibernationFixup", "NVMeFix",
-    "IntelMausiEthernet", "AppleIGC", "AppleIntelE1000e", "AppleIntelI210Ethernet",
+    "HibernationFixup", "NVMeFix", "RTCMemoryFixup",
+    "IntelMausiEthernet", "AppleIGC", "AppleIntelE1000e", "AppleIntelI210Ethernet", "AppleIGB",
     "RealtekRTL8111", "RealtekRTL8100", "RealtekR1000", "LucyRTL8125Ethernet",
     "AtherosE2200Ethernet", "AtherosL1Ethernet", "AtherosL1eEthernet", "BCM5722D",
     "NullEthernet",
@@ -200,13 +200,13 @@ LOAD_ORDER = [
     "VoodooPS2Controller","VoodooPS2Keyboard","VoodooPS2Mouse","VoodooPS2Trackpad",
     "VoodooGPIO", "VoodooI2C",
     "VoodooI2CHID","VoodooI2CSynaptics","VoodooI2CELAN",
-    "VoodooI2CAtmel","VoodooI2CFTE","VoodooI2CGoodix",
+    "VoodooI2CAtmel","VoodooI2CFTE","VoodooI2CGoodix","AlpsHID",
     "VoodooSMBus", "VoodooRMI",
     "YogaSMC", "AsusSMC",
     "BrightnessKeys", "NoTouchID",
-    "USBToolBox", "UTBMap", "USBInjectAll", "XHCI-unsupported",
+    "USBToolBox", "UTBMap", "USBInjectAll", "XHCI-unsupported", "GenericUSBXHCI",
     "RealtekCardReader", "RealtekCardReaderFriend", "Sinetek-rtsx",
-    "JMicronATA", "AHCIPortInjector",
+    "JMicronATA", "AHCIPortInjector", "Innie",
     "DebugEnhancer",
 ]
 
@@ -589,8 +589,11 @@ def _nvram_section(
     if audio_enabled:
         boot_args.append(f"alcid={layout_id}")
 
-    if macos_major >= 15:
-        # Sequoia+: RestrictEvents VMM spoof so macOS doesn't see unsupported Intel hardware
+    if macos_major >= 15 and not has_macos_supported_gpu(profile):
+        # Sequoia+: RestrictEvents VMM spoof so macOS doesn't see unsupported Intel hardware.
+        # Only needed when there's no natively-accelerated GPU to fall back on — on real
+        # supported iGPUs/dGPUs this fights WhateverGreen's actual acceleration patches
+        # and panics at ExitBootServices.
         boot_args.append("revpatch=sbvmm")
         boot_args.append("-lilubetaall")
 
@@ -886,6 +889,7 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
             },
             "Entries":  [],
             "Security": {
+                "AllowNvramReset":        True,   # ResetNvramEntry.efi is loaded below; without this the picker entry it adds does nothing when selected
                 "AllowSetDefault":        True,
                 "ApECID":                 0,
                 "AuthRestart":            False,

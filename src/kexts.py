@@ -45,11 +45,15 @@ def _extract_zip(zip_path: Path, extract_dir: Path) -> None:
     odd names — extracting them onto a flaky FAT32 USB is exactly where two
     hwdb reports died with WinError 433 mid-VirtualSMC — and they also waste
     most of the space the kext zip takes on disk."""
+    extract_dir = extract_dir.resolve()
     with zipfile.ZipFile(str(zip_path)) as z:
         for member in z.namelist():
             low = member.lower()
             if "__macosx" in low or ".dsym" in low:
                 continue
+            dest = (extract_dir / member).resolve()
+            if dest != extract_dir and extract_dir not in dest.parents:
+                continue  # zip-slip guard: member path escapes extract_dir
             z.extract(member, str(extract_dir))
 
 @dataclass
@@ -377,7 +381,11 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     vendor = _dmi("sys_vendor") or _dmi("board_vendor")
     board_name = _dmi("board_name")
-    tp = _detect_touchpad_type() if profile.platform == "laptop" else "none"
+    # Trust the profile. touchpad_type is detected once during hardware
+    # profiling (hardware.py) and stored there; re-detecting live here meant a
+    # manually-entered profile got whatever touchpad the machine *running*
+    # HackMate has, not the target's.
+    tp = (profile.touchpad_type or "").strip().lower() or "none"
     legacy = _is_legacy(profile)
 
     add("Lilu")

@@ -212,6 +212,19 @@ ALC_LAYOUTS: dict[str, list[int]] = {
 }
 
 def get_alc_layout(codec: str) -> int:
+    """Best-guess AppleALC layout-id for a codec.
+
+    Prefers the curated "most laptops / most desktops" pick from
+    config_editor.AUDIO_LAYOUTS — those are vetted for working *input* as well
+    as output. ALC_LAYOUTS below is just every numerically-valid layout for the
+    codec, and its first element is often a partial one (output works, mic
+    doesn't), which is exactly the "speaker fine, mic dead" class of bug.
+    """
+    from config_editor import AUDIO_LAYOUTS
+    up = codec.upper()
+    for key, layouts in AUDIO_LAYOUTS.items():
+        if key in up and layouts:
+            return layouts[0][0]
     for key, layouts in ALC_LAYOUTS.items():
         if key.lower() in codec.lower():
             return layouts[0]
@@ -408,15 +421,14 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
         if profile.cpu_vendor == "amd":
             add("SMCAMDProcessor")
 
-    codec = profile.audio_codec.lower()
-    alc_supported = any(k.lower() in codec for k in ALC_LAYOUTS)
-    if alc_supported or not codec:
+    # AppleALC ships on every non-legacy build. Unlike VoodooHDA it is inert
+    # when it can't match the codec (it never causes a boot failure), so there
+    # is no downside to always injecting it — and detection frequently yields
+    # only a generic string ("Realtek", "High Definition Audio") with no
+    # ALCxxxx, which previously left the EFI with no audio kext at all.
+    # CodecCommander (EAPD sleep fix) is handled by AppleALC on modern systems.
+    if not legacy:
         add("AppleALC")
-    # VoodooHDA is not safe to prelink from an installer EFI on modern macOS.
-    # Upstream's Big Sur+ workflow installs it into /Library/Extensions after
-    # macOS is running, so leave explicitly unsupported codecs unconfigured
-    # here instead of turning a missing-audio issue into a boot failure.
-    # CodecCommander (EAPD sleep fix) is handled by AppleALC on modern systems
 
     if profile.platform == "laptop":
         if tp == "rmi":

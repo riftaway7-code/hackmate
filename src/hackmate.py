@@ -1497,7 +1497,8 @@ class ScanScreen(Screen):
         if profile.dgpu_name:
             lines.append(f"  dGPU      {profile.dgpu_name} [{profile.dgpu_vendor}]")
         lines += [
-            f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}",
+            f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}"
+            "   (mic or output wrong? try another layout-id in Edit Config)",
             f"  Ethernet  {profile.ethernet_name or 'None'}",
             f"  WiFi      {profile.wifi_name or 'None'}",
             f"  SMBIOS    {profile.smbios_model}",
@@ -1506,10 +1507,12 @@ class ScanScreen(Screen):
         ]
         from hardware import hardware_warnings
         warnings = hardware_warnings(profile)
-        if profile.audio_codec and not alc_layout_is_known(profile.audio_codec):
+        if not alc_layout_is_known(profile.audio_codec):
+            which = f"codec \"{profile.audio_codec}\"" if profile.audio_codec else "your audio codec"
             warnings.append(
-                f"layout-id {layout} for codec \"{profile.audio_codec}\" is an unconfirmed default, "
-                "not a verified match — if you get no audio, try other layout IDs from "
+                f"couldn't identify {which} — AppleALC is included with a generic "
+                f"layout-id {layout}, which may not match. if you get no audio, try "
+                "other layout IDs for your board from "
                 "https://github.com/acidanthera/AppleALC/wiki/Supported-codecs"
             )
         for w in warnings:

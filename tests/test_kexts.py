@@ -149,6 +149,15 @@ class AlcLayoutConfidenceTests(unittest.TestCase):
     def test_unrecognized_alc_model_is_not_confirmed(self):
         self.assertFalse(alc_layout_is_known("ALC1200"))
 
+    def test_layout_uses_the_curated_pick_not_the_first_valid_id(self):
+        # config_editor.AUDIO_LAYOUTS is vetted for working input too; the raw
+        # ALC_LAYOUTS lists are just every valid id and their first element is
+        # often output-only ("speaker fine, mic dead").
+        self.assertEqual(get_alc_layout("ALC295"), 28)          # not 11
+        self.assertEqual(get_alc_layout("ALC255"), 71)          # not 3
+        self.assertEqual(get_alc_layout("ALC1220"), 7)          # not 1
+        self.assertEqual(get_alc_layout("Realtek ALC257"), 21)  # not 11
+
 
 class OpenCoreDebugBuildTests(unittest.TestCase):
     def test_fallback_url_points_at_debug_not_release(self):

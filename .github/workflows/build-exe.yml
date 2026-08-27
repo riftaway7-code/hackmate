@@ -163,6 +163,7 @@ jobs:
             --hidden-import ssdt `
             --hidden-import pci_ids `
             --hidden-import pci_disable `
+            --hidden-import offline_installer `
             --hidden-import certifi `
             --add-data "src\.version;." `
             --add-data "src\.release_tag;." `

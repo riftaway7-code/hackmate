@@ -89,6 +89,12 @@ const homeActions = [
     title: 'Build History',
     subtitle: 'Browse previous builds',
   ),
+  HackMateAction(
+    id: 'offline_installer',
+    icon: Icons.download_for_offline_rounded,
+    title: 'Offline Installer',
+    subtitle: 'Full macOS installer on a 2nd USB (UnPlugged)',
+  ),
 ];
 
 class HomeShell extends StatefulWidget {

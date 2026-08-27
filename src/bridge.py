@@ -36,6 +36,7 @@ import config_editor
 import hardware
 import recovery
 import build_runner
+import offline_installer
 
 
 def _to_jsonable(value):
@@ -329,6 +330,36 @@ def _build_run(params, emit):
     return build_runner.run(params, emit)
 
 
+_OFFLINE_MAJORS = [
+    {"major": "15", "name": "Sequoia"},
+    {"major": "14", "name": "Sonoma"},
+    {"major": "13", "name": "Ventura"},
+    {"major": "26", "name": "Tahoe"},
+]
+
+
+def _offline_supported_versions(params, emit):
+    return {"versions": _OFFLINE_MAJORS}
+
+
+def _offline_prepare(params, emit):
+    device = params["device"]
+    major = params["major"]
+
+    def progress_cb(done, total):
+        pct = int(done * 100 / total) if total else 0
+        emit("progress", {"done": done, "total": total, "pct": pct})
+
+    def log(message):
+        emit("log", {"level": "info", "message": message})
+
+    result = offline_installer.prepare_offline_usb(
+        device, major, progress_cb=progress_cb, log=log
+    )
+    emit("log", {"level": "ok", "message": "Offline installer USB is ready"})
+    return result
+
+
 _config_sessions: dict[str, dict] = {}
 
 
@@ -523,6 +554,8 @@ METHODS = {
     "recovery.all_versions": _recovery_all_versions,
     "recovery.download": _recovery_download,
     "build.run": _build_run,
+    "offline.supported_versions": _offline_supported_versions,
+    "offline.prepare": _offline_prepare,
 }
 
 

@@ -8,6 +8,7 @@ import 'config_editor_screen.dart';
 import 'disk_map_screen.dart';
 import 'efi_health_screen.dart';
 import 'log_checker_screen.dart';
+import 'offline_installer_screen.dart';
 import 'recovery_download_screen.dart';
 import 'restore_screen.dart';
 import 'settings_screen.dart';
@@ -62,6 +63,8 @@ class MainContent extends StatelessWidget {
         return RestoreScreen(bridge: bridge);
       case 'download_recovery':
         return RecoveryDownloadScreen(bridge: bridge);
+      case 'offline_installer':
+        return OfflineInstallerScreen(bridge: bridge);
       case 'usb_mapping':
         return UsbMappingScreen(bridge: bridge);
       case 'edit_config':

@@ -208,6 +208,19 @@ ALC_LAYOUTS: dict[str, list[int]] = {
 }
 
 def get_alc_layout(codec: str) -> int:
+    """Best-guess AppleALC layout-id for a codec.
+
+    Prefers the curated "most laptops / most desktops" pick from
+    config_editor.AUDIO_LAYOUTS — those are vetted for working *input* as well
+    as output. ALC_LAYOUTS below is just every numerically-valid layout for the
+    codec, and its first element is often a partial one (output works, mic
+    doesn't), which is exactly the "speaker fine, mic dead" class of bug.
+    """
+    from config_editor import AUDIO_LAYOUTS
+    up = codec.upper()
+    for key, layouts in AUDIO_LAYOUTS.items():
+        if key in up and layouts:
+            return layouts[0][0]
     for key, layouts in ALC_LAYOUTS.items():
         if key.lower() in codec.lower():
             return layouts[0]

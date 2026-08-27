@@ -642,7 +642,8 @@ class ScanScreen(Screen):
         if profile.dgpu_name:
             lines.append(f"  dGPU      {profile.dgpu_name} [{profile.dgpu_vendor}]")
         lines += [
-            f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}",
+            f"  Audio     {profile.audio_name}  /  codec: {profile.audio_codec}  →  layout-id {layout}"
+            "   (mic or output wrong? try another layout-id in Edit Config)",
             f"  Ethernet  {profile.ethernet_name or 'None'}",
             f"  WiFi      {profile.wifi_name or 'None'}",
             f"  SMBIOS    {profile.smbios_model}",

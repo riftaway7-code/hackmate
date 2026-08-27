@@ -133,14 +133,15 @@ class RecoveryCommandTests(unittest.TestCase):
         self.assertNotIn("-os", sonoma_args)
 
     def test_shared_command_builder_includes_output_directory(self):
-        args = macrecovery_args(self._version("15"), Path("/tmp/recovery"))
+        outdir = Path("/tmp/recovery")
+        args = macrecovery_args(self._version("15"), outdir)
 
         self.assertEqual(
             [
                 "-b", "Mac-7BA5B2D9E42DDD94",
                 "-m", "00000000000000000",
                 "download",
-                "--outdir", "/tmp/recovery",
+                "--outdir", str(outdir),
             ],
             args,
         )

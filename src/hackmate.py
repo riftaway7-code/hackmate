@@ -726,6 +726,7 @@ class WelcomeScreen(Screen):
                     Button(t("welcome.edit_config"),      id="edit_cfg",   classes="primary"),
                     Button(t("welcome.check_logs"),       id="check_logs", classes="primary"),
                     Button(t("welcome.build_history"),    id="history",    classes="primary"),
+                    Button(t("welcome.offline_installer"), id="offline",   classes="primary"),
                     Button(
                         t("welcome.sharing_on") if hwdb_submit.has_consented() else t("welcome.sharing_off"),
                         id="hwdb_toggle", classes="primary"
@@ -772,6 +773,8 @@ class WelcomeScreen(Screen):
             self.app.push_screen(LogCheckerScreen())
         elif event.button.id == "history":
             self.app.push_screen(HistoryScreen())
+        elif event.button.id == "offline":
+            self.app.push_screen(OfflineInstallerScreen())
         elif event.button.id == "hwdb_toggle":
             import hwdb_submit
             hwdb_submit.set_consent(not hwdb_submit.has_consented())
@@ -781,6 +784,99 @@ class WelcomeScreen(Screen):
             self.app.push_screen(LanguageScreen())
         elif event.button.id == "quit":
             self.app.exit()
+
+class OfflineInstallerScreen(Screen):
+    """Stage a FULL macOS installer on a second USB so the install can run with
+    no network, using corpnewt/UnPlugged. This does not replace the OpenCore
+    USB — you still boot that, then run UnPlugged.command from this one."""
+
+    _MAJORS = [("15", "Sequoia"), ("14", "Sonoma"), ("13", "Ventura"), ("26", "Tahoe")]
+
+    def compose(self) -> ComposeResult:
+        self._drives = get_usb_drives()
+        drive_items = [
+            ListItem(Label(f"  {name}   {size}   {label}"))
+            for name, size, label in self._drives
+        ] or [ListItem(Label("  No USB drives detected — plug one in and re-open this screen"))]
+
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── Offline Installer (UnPlugged) ───────────────────────", classes="title"),
+                Static("  Stages a full ~13 GB macOS installer + UnPlugged.command onto a", classes="info"),
+                Static("  SECOND USB (16 GB+). Boot the OpenCore USB, pick recovery, open", classes="info"),
+                Static("  Terminal, then run ./UnPlugged.command from this USB. Beta — verify", classes="info"),
+                Static("  the staged files. github.com/corpnewt/UnPlugged", classes="info"),
+                Static(""),
+                Static("  macOS version:", classes="info"),
+                ListView(*[ListItem(Label(f"  macOS {name} ({m})")) for m, name in self._MAJORS], id="ver-list"),
+                Static(""),
+                Static("  Second USB (WILL BE ERASED):", classes="warn"),
+                ListView(*drive_items, id="usb-list"),
+                Static(""),
+                ProgressBar(id="dl-progress", total=100),
+                RichLog(id="offline-log", markup=True, max_lines=400),
+                Button("Prepare offline USB", id="go",   classes="primary"),
+                Button("← Back",              id="back", classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def _log(self, msg: str, level: str = "info") -> None:
+        color = {"ok": "green", "warn": "yellow", "error": "red"}.get(level, "#888888")
+        try:
+            self.query_one("#offline-log", RichLog).write(f"[{color}]{msg}[/{color}]")
+        except Exception:
+            pass
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.app.pop_screen()
+            return
+        if event.button.id != "go":
+            return
+        vi = self.query_one("#ver-list", ListView).index
+        ui_ = self.query_one("#usb-list", ListView).index
+        if vi is None:
+            self._log("Pick a macOS version first.", "warn"); return
+        if not self._drives or ui_ is None:
+            self._log("Pick the second USB first.", "warn"); return
+        major = self._MAJORS[vi][0]
+        device = self._drives[ui_][0]
+        self.query_one("#go", Button).disabled = True
+        self._run_prepare(device, major)
+
+    @work(thread=True)
+    def _run_prepare(self, device: str, major: str) -> None:
+        import offline_installer
+        bar = self.query_one("#dl-progress", ProgressBar)
+
+        def progress(done: int, total: int) -> None:
+            pct = int(done * 100 / total) if total else 0
+            self.app.call_from_thread(bar.update, total=100, progress=pct)
+
+        try:
+            require_admin()
+            result = offline_installer.prepare_offline_usb(
+                device, major,
+                progress_cb=progress,
+                log=lambda m: self.app.call_from_thread(self._log, f"  {m}"),
+            )
+        except Exception as e:
+            self.app.call_from_thread(self._log, f"Failed: {e}", "error")
+            self.app.call_from_thread(setattr, self.query_one("#go", Button), "disabled", False)
+            return
+
+        vol = result.get("volume", "the USB")
+        self.app.call_from_thread(self._log, "", "ok")
+        self.app.call_from_thread(self._log, "Done. On the target machine:", "ok")
+        self.app.call_from_thread(self._log, "  1. Boot the OpenCore USB HackMate built.")
+        self.app.call_from_thread(self._log, "  2. In the picker choose the macOS recovery entry.")
+        self.app.call_from_thread(self._log, "  3. Utilities → Terminal, then:")
+        self.app.call_from_thread(self._log, f'       cd "{vol}"')
+        self.app.call_from_thread(self._log, "       ./UnPlugged.command")
+        self.app.call_from_thread(self._log, "  (see OFFLINE-INSTALL-README.txt on the USB)", "ok")
 
 class HealthCheckScreen(Screen):
     """Audit any OpenCore EFI — a mounted partition, a USB, or a folder path."""

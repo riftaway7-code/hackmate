@@ -36,6 +36,7 @@ FILES = [
     "dualboot.py",
     "partutil.py",
     "project_stats.py",
+    "offline_installer.py",
 ]
 
 

@@ -71,6 +71,7 @@ jobs:
             --hidden-import log_checker `
             --hidden-import partutil `
             --hidden-import project_stats `
+            --hidden-import offline_installer `
             --hidden-import tkinter `
             --hidden-import tkinter.filedialog `
             --add-data "src\.version;." `
@@ -109,6 +110,7 @@ jobs:
             --hidden-import log_checker `
             --hidden-import partutil `
             --hidden-import project_stats `
+            --hidden-import offline_installer `
             --hidden-import tkinter `
             --hidden-import tkinter.filedialog `
             --add-data "src\.version;." `

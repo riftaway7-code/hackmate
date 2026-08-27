@@ -602,6 +602,7 @@ class WelcomeScreen(Screen):
             (t("welcome.edit_config"),      lambda: self.app.push_screen(ConfigEditorUSBScreen), "primary"),
             (t("welcome.check_logs"),       lambda: self.app.push_screen(LogCheckerScreen), "primary"),
             (t("welcome.build_history"),    lambda: self.app.push_screen(HistoryScreen), "primary"),
+            (t("welcome.offline_installer"),lambda: self.app.push_screen(OfflineInstallerScreen), "primary"),
             (hwdb_label,                    _toggle_hwdb, "primary"),
             (t("welcome.language"),         lambda: self.app.push_screen(LanguageScreen), "primary"),
             (t("welcome.quit"),             self.app.destroy, "danger"),
@@ -2088,6 +2089,82 @@ class RecoveryDownloadScreen(Screen):
             self.app.call_from_thread(self.status_label.config, text=f"  Failed: {e}", fg=WARN)
         finally:
             self.app.call_from_thread(self.download_btn.config, state="normal")
+
+
+class OfflineInstallerScreen(Screen):
+    """Stage a full macOS installer + corpnewt/UnPlugged on a second USB so the
+    install can run with no network. Does not replace the OpenCore USB."""
+
+    _MAJORS = [("15", "Sequoia"), ("14", "Sonoma"), ("13", "Ventura"), ("26", "Tahoe")]
+
+    def on_show(self):
+        self._drives = get_usb_drives()
+
+        wrap = tk.Frame(self, bg=BG)
+        wrap.pack(fill="both", expand=True, padx=30, pady=20)
+        title(wrap, "── Offline Installer (UnPlugged) ───────────────────────").pack(anchor="w")
+        for line in (
+            "  Stages a full ~13 GB macOS installer + UnPlugged.command onto a SECOND",
+            "  USB (16 GB+). Boot the OpenCore USB, pick recovery, open Terminal, run",
+            "  ./UnPlugged.command from this USB. Beta — verify the staged files.",
+            "  github.com/corpnewt/UnPlugged",
+        ):
+            info(wrap, line).pack(anchor="w")
+
+        info(wrap, "  macOS version:").pack(anchor="w", pady=(8, 0))
+        self.version_list = ListBox(
+            wrap, items=[f"  macOS {name} ({m})" for m, name in self._MAJORS], height=4
+        )
+        self.version_list.pack(fill="x", pady=(2, 8))
+        self.version_list.selection_set(0)
+
+        info(wrap, "  Second USB (WILL BE ERASED):").pack(anchor="w")
+        usb_items = [f"  {n}   {s}   {l}" for n, s, l in self._drives] or ["  No USB drives detected"]
+        self.usb_list = ListBox(wrap, items=usb_items, height=5)
+        self.usb_list.pack(fill="x", pady=(2, 8))
+
+        self.status_label = info(wrap, "")
+        self.status_label.pack(anchor="w", pady=(4, 0))
+
+        btn_row = tk.Frame(wrap, bg=BG)
+        btn_row.pack(fill="x", pady=(8, 0))
+        self.go_btn = button(btn_row, "Prepare offline USB", self._go, "primary")
+        self.go_btn.pack(side="left", padx=(0, 8))
+        button(btn_row, "← Back", self.app.pop_screen, "back").pack(side="left")
+
+    def _go(self):
+        if not self._drives or self.usb_list.index is None:
+            self.status_label.config(text="  Pick the second USB first.", fg=WARN)
+            return
+        major = self._MAJORS[self.version_list.index or 0][0]
+        device = self._drives[self.usb_list.index][0]
+        self.go_btn.config(state="disabled")
+        self.status_label.config(text="  Working… (the ~13 GB download is the long part)", fg=INFOC)
+        threading.Thread(target=self._run, args=(device, major), daemon=True).start()
+
+    def _run(self, device: str, major: str):
+        import offline_installer
+
+        def progress(done, total):
+            pct = int(done * 100 / total) if total else 0
+            self.app.call_from_thread(
+                self.status_label.config, text=f"  Downloading… {pct}%", fg=INFOC)
+
+        try:
+            result = offline_installer.prepare_offline_usb(
+                device, major, progress_cb=progress,
+                log=lambda m: self.app.call_from_thread(
+                    self.status_label.config, text=f"  {m}", fg=INFOC),
+            )
+            vol = result.get("volume", "the USB")
+            self.app.call_from_thread(
+                self.status_label.config,
+                text=f"  Ready. Boot the OpenCore USB → recovery → Terminal → "
+                     f'cd "{vol}" && ./UnPlugged.command', fg=ACCENT)
+        except Exception as e:
+            self.app.call_from_thread(self.status_label.config, text=f"  Failed: {e}", fg=WARN)
+        finally:
+            self.app.call_from_thread(self.go_btn.config, state="normal")
 
 
 class ConfigEditorUSBScreen(Screen):

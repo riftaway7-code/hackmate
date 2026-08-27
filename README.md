@@ -168,6 +168,34 @@ sudo ./build/macos/Build/Products/Release/gui_flutter.app/Contents/MacOS/gui_flu
 - run usbtoolbox (saved to `EFI/HackMate-Extras/`) inside macos to map ur usb ports
 - swap out the placeholder `USBMap.kext` w/ the one u generate — or just use hackmate's usb mapping screen
 
+## offline installer (no network during install)
+
+the normal usb carries apple's ~700 mb recovery image — the actual macos payload still
+downloads from apple after u boot it. if the install machine has no internet (or apple's
+installer servers are blocked / throwing `PKDownloadError`), use the **Offline Installer**
+option on the welcome screen. it's built around [corpnewt/UnPlugged](https://github.com/corpnewt/UnPlugged).
+
+what it does:
+- resolves + downloads the **full** `InstallAssistant.pkg` (~13 gb) for the macos version u
+  pick, straight from apple's software-update catalog (same source gibMacOS uses)
+- formats a **second usb (16 gb+)** as exfat and drops the installer payload +
+  `UnPlugged.command` + a short readme on it
+
+then on the target machine: boot the opencore usb hackmate built, pick the recovery entry in
+the picker, open **Utilities → Terminal**, and run:
+
+```
+cd "/Volumes/INSTALLER"
+./UnPlugged.command
+```
+
+UnPlugged handles the rest (pick this installer as the source, pick the target disk) with no
+network. sonoma+ note: if it can't mount the payload from recovery, boot an older (ventura)
+recovery entry and run it from there.
+
+> beta — not yet end-to-end tested on real hardware across all three host OSes. sanity-check
+> the staged files before u wipe anything.
+
 ## faq
 
 **do i need a mac to use hackmate?**
@@ -186,7 +214,7 @@ yeah — hackmate was literally built and tested on a thinkpad t480s. intel wifi
 yep. grab `HackMate.exe` from the releases page, no python or deps needed at all.
 
 **does hackmate download the full macos installer for offline installation?**
-not currently. hackmate downloads apple's recovery image (about 600 mb), which still downloads the full macos payload from apple after u boot it. if recovery shows `PKDownloadError 8` or ur network blocks apple's installer servers, try a different connection or prepare a full installer separately on a mac. hackmate cannot bypass filtering inside recovery.
+by default no — the normal usb only carries apple's ~700 mb recovery image, which still pulls the macos payload from apple after u boot it. but the **Offline Installer** option on the welcome screen does stage a full ~13 gb installer on a second usb (via UnPlugged) so the install runs with no network — see [offline installer](#offline-installer-no-network-during-install) above. if recovery itself shows `PKDownloadError 8`, that's the recovery path, not the offline one.
 
 **does intel wifi show up as native (built-in) wifi on tahoe?**
 not with the onboard intel chip — opensource's AirportItlwm (the kext that makes intel wifi appear as real apple wifi in the menu bar) hasn't had a build past sonoma since mid-2024, so sequoia and tahoe are stuck with itlwm + heliport, which works for internet access but isn't apple-native (no menu bar icon, no airdrop/handoff over wifi). if u want actual native wifi on tahoe — menu bar, airdrop, handoff, all of it — swap in a genuine apple-supported broadcom card (bcm94360cd, dw1560, etc). those use macos's built-in airport driver, same as a real mac, so there's no version-pinned kext to break on any future macos release. hackmate will warn u about this and offer the broadcom-card path when it detects intel-only wifi.

@@ -520,7 +520,11 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
         # Required by the universal AMD Vanilla patch set.
         quirks["ProvideCurrentCpuInfo"] = True
 
-    # AMD needs extra kernel patches
+    # AMD Vanilla kernel patches (github.com/AMD-OSX/AMD_Vanilla, vendored in
+    # amd_patches.plist). These are XNU *processor* patches — keyed on the CPU
+    # vendor only. An AMD Radeon GPU on an Intel CPU must NOT get them: they
+    # patch cpuid/XCPM paths that only exist the AMD way, so applying them to an
+    # Intel kernel panics before the picker. Radeon needs no kernel patch.
     patches = []
     if profile.cpu_vendor == "amd":
         patches = _amd_kernel_patches(profile)
@@ -555,6 +559,9 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
     }
 
 def _amd_kernel_patches(profile: HardwareProfile) -> list[dict]:
+    if profile.cpu_vendor != "amd":
+        # Defensive: never let these reach an Intel kernel, regardless of GPU.
+        return []
     patch_path = Path(__file__).with_name("amd_patches.plist")
     with patch_path.open("rb") as patch_file:
         patches = plistlib.load(patch_file)["Kernel"]["Patch"]

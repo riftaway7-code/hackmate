@@ -132,37 +132,55 @@ def _clean_banner():
     return [r.ljust(width) for r in rows]
 
 
+def _banner_cells():
+    lines = _clean_banner()
+    return [[ch == "█" for ch in row] for row in lines]
+
+
+def _paint_banner(size, cells, cols, rows, fill):
+    img = Image.new("RGBA", (cols * size, rows * size), (0, 0, 0, 0))
+    pd = ImageDraw.Draw(img)
+    for r, row in enumerate(cells):
+        run_start = None
+        for c in range(cols + 1):
+            on = c < cols and row[c]
+            if on and run_start is None:
+                run_start = c
+            elif not on and run_start is not None:
+                pd.rectangle((run_start * size, r * size, c * size - 1, (r + 1) * size - 1), fill=fill)
+                run_start = None
+    return img
+
+
 def render_banner_layer(w, h):
     layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    target_w = int(w * 0.52)
-    lines = _clean_banner()
-    size = 8
-    font = _font(MONO_CANDIDATES, size)
-    while True:
-        nxt = _font(MONO_CANDIDATES, size + 2)
-        bbox = d.multiline_textbbox((0, 0), "\n".join(lines), font=nxt, spacing=0)
-        if bbox[2] - bbox[0] > target_w or size > 260:
-            break
-        size += 2
-        font = nxt
-    text = "\n".join(lines)
-    bbox = d.multiline_textbbox((0, 0), text, font=font, spacing=0)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = (w - tw) // 2 - bbox[0]
-    y = int(h * 0.14)
+    cells = _banner_cells()
+    rows = len(cells)
+    cols = len(cells[0])
+    cell_w = max(2, int(w * 0.52) // cols)
+    cell_h = int(cell_w * 1.9)
 
-    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    gd.multiline_text((x, y), text, font=font, fill=(ACCENT[0], ACCENT[1], ACCENT[2], 220), spacing=0)
-    glow = glow.filter(ImageFilter.GaussianBlur(max(3, size // 10)))
+    marks = _paint_banner(1, cells, cols, rows, (255, 255, 255, 255))
+    marks = marks.resize((cols * cell_w, rows * cell_h), Image.NEAREST)
+    bx = (w - marks.width) // 2
+    by = int(h * 0.13)
+
+    def stamp(dx, dy, rgba):
+        solid = Image.new("RGBA", marks.size, rgba)
+        tile = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        tile.paste(solid, (bx + dx, by + dy), marks)
+        return tile
+
+    glow = stamp(0, 0, (ACCENT[0], ACCENT[1], ACCENT[2], 230))
+    glow = glow.filter(ImageFilter.GaussianBlur(max(4, cell_w)))
     layer = Image.alpha_composite(layer, glow)
+    layer = Image.alpha_composite(layer, stamp(max(3, cell_w // 4), max(3, cell_w // 4), (0, 0, 0, 150)))
+    layer = Image.alpha_composite(layer, stamp(0, 0, (236, 252, 254, 255)))
 
     d = ImageDraw.Draw(layer)
-    d.multiline_text((x + 3, y + 3), text, font=font, fill=(0, 0, 0, 150), spacing=0)
-    d.multiline_text((x, y), text, font=font, fill=(236, 252, 254, 255), spacing=0)
-
-    sub_font = _font(UI_CANDIDATES, max(15, size // 5))
+    th = rows * cell_h
+    y = by
+    sub_font = _font(UI_CANDIDATES, max(16, int(w / 76)))
     sb = d.textbbox((0, 0), SUBTITLE, font=sub_font)
     d.text(((w - (sb[2] - sb[0])) // 2, y + th + int(h * 0.028)), SUBTITLE,
            font=sub_font, fill=(ACCENT[0], ACCENT[1], ACCENT[2], 235))

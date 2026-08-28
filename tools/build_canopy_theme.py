@@ -52,26 +52,32 @@ def _png_bytes(img):
 
 
 def draw_apple(px=256):
-    s = px * 4
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    cx, cy = s // 2, int(s * 0.56)
-    rx, ry = int(s * 0.30), int(s * 0.33)
-    d.ellipse((cx - rx, cy - ry, cx - int(s * 0.02), cy + ry), fill=(245, 250, 252, 255))
-    d.ellipse((cx + int(s * 0.02), cy - ry, cx + rx, cy + ry), fill=(245, 250, 252, 255))
-    d.ellipse((cx - int(rx * 0.98), cy - int(ry * 0.9), cx + int(rx * 0.98), cy + int(ry * 1.05)),
-              fill=(245, 250, 252, 255))
-    bite = int(s * 0.11)
-    d.ellipse((cx + rx - bite, cy - int(ry * 0.35), cx + rx + bite, cy + int(ry * 0.55)),
-              fill=(0, 0, 0, 0))
-    leaf = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    s = px * 6
+    white = (244, 249, 251, 255)
+    mask = Image.new("L", (s, s), 0)
+    m = ImageDraw.Draw(mask)
+    cx, cy = s // 2, int(s * 0.585)
+    rx, ry = int(s * 0.335), int(s * 0.345)
+
+    m.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=255)
+    dip_w, dip_h = int(s * 0.17), int(s * 0.11)
+    m.ellipse((cx - dip_w, cy - ry - dip_h, cx + dip_w, cy - ry + dip_h), fill=0)
+
+    bite_r = int(s * 0.14)
+    bx = cx + rx + int(bite_r * 0.18)
+    m.ellipse((bx - bite_r, cy - bite_r, bx + bite_r, cy + bite_r), fill=0)
+
+    leaf = Image.new("L", (s, s), 0)
     ld = ImageDraw.Draw(leaf)
-    lw, lh = int(s * 0.11), int(s * 0.20)
-    ld.ellipse((cx - lw // 2, int(s * 0.14), cx + lw // 2, int(s * 0.14) + lh),
-               fill=(245, 250, 252, 255))
-    leaf = leaf.rotate(-32, center=(cx, int(s * 0.22)), resample=Image.BICUBIC)
-    img = Image.alpha_composite(img, leaf)
-    return img.resize((px, px), Image.LANCZOS)
+    lw, lh = int(s * 0.075), int(s * 0.16)
+    lx, ly = cx + int(s * 0.055), int(s * 0.17)
+    ld.ellipse((lx - lw, ly - lh, lx + lw, ly + lh), fill=255)
+    leaf = leaf.rotate(-38, center=(lx, ly + lh // 3), resample=Image.BICUBIC)
+    mask = Image.composite(Image.new("L", (s, s), 255), mask, leaf)
+
+    out = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    out.paste(Image.new("RGBA", (s, s), white), (0, 0), mask)
+    return out.resize((px, px), Image.LANCZOS)
 
 
 def wrap_icns(png_1x, png_2x):

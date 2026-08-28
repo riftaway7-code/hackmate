@@ -915,7 +915,8 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
         import hackmate_core as _hc
 
         if _hc.available():
-            _hc.apply_to_config(config)
+            style = hackmate_core if isinstance(hackmate_core, str) else "full"
+            _hc.apply_to_config(config, style=style)
 
     return config
 

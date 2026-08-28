@@ -5,21 +5,29 @@ THEME = "HackMate\\Core"
 RESOURCES = Path(__file__).resolve().parent / "assets" / "canopy" / "Resources"
 EXTRA_DRIVERS = ["OpenCanopy.efi"]
 
-_POINTER = 0x0010
-_FLAVOUR = 0x0080
 _VOLUME_ICON = 0x0001
+_POINTER = 0x0010
+_MINIMAL_UI = 0x0040
+_FLAVOUR = 0x0080
+
 PICKER_ATTRIBUTES = _VOLUME_ICON | _POINTER | _FLAVOUR
+STYLES = {
+    "full": PICKER_ATTRIBUTES,
+    "minimal": PICKER_ATTRIBUTES | _MINIMAL_UI,
+}
 
 
 def available() -> bool:
     return (RESOURCES / "Image" / "HackMate" / "Core" / "Background.icns").is_file()
 
 
-def apply_to_config(config: dict) -> None:
+def apply_to_config(config: dict, style: str = "full") -> None:
+    attrs = STYLES.get(style, PICKER_ATTRIBUTES)
+
     boot = config.setdefault("Misc", {}).setdefault("Boot", {})
     boot["PickerMode"] = "External"
     boot["PickerVariant"] = THEME
-    boot["PickerAttributes"] = int(boot.get("PickerAttributes", 0)) | PICKER_ATTRIBUTES
+    boot["PickerAttributes"] = int(boot.get("PickerAttributes", 0)) | attrs
     boot["PickerAudioAssist"] = bool(boot.get("PickerAudioAssist", False))
 
     uefi = config.setdefault("UEFI", {})
@@ -38,7 +46,22 @@ def apply_to_config(config: dict) -> None:
         out["Resolution"] = "Max"
 
 
-def install_resources(oc_dir, oc_release_root, log=None) -> list[str]:
+def _pick_background(core_dir, resolution, log):
+    if not resolution or "x" not in str(resolution).lower():
+        return
+    try:
+        height = int(str(resolution).lower().split("x")[1].split("@")[0])
+    except (ValueError, IndexError):
+        return
+    variants = {1080: "Background.icns", 1440: "Background_1440p.icns", 2160: "Background_2160p.icns"}
+    best = min(variants, key=lambda h: abs(h - height))
+    src = core_dir / variants[best]
+    if best != 1080 and src.is_file():
+        shutil.copy(src, core_dir / "Background.icns")
+        log(f"  HackMate-Core: background set to {best}p for {resolution}", "ok")
+
+
+def install_resources(oc_dir, oc_release_root, resolution=None, log=None) -> list[str]:
     if log is None:
         def log(msg, level="info"):
             print(msg)
@@ -50,6 +73,7 @@ def install_resources(oc_dir, oc_release_root, log=None) -> list[str]:
     if dst_res.exists():
         shutil.rmtree(dst_res)
     shutil.copytree(RESOURCES, dst_res)
+    _pick_background(dst_res / "Image" / "HackMate" / "Core", resolution, log)
     installed.append("Resources/")
     log("  HackMate-Core: Resources/ installed", "ok")
 

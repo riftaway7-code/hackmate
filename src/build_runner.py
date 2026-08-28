@@ -366,7 +366,8 @@ def run(params: dict, emit) -> dict:
                         import hackmate_core as _hc
 
                         if _hc.available():
-                            _hc.install_resources(oc_dir, search_root, log=log)
+                            _res = config.get("UEFI", {}).get("Output", {}).get("Resolution")
+                            _hc.install_resources(oc_dir, search_root, resolution=_res, log=log)
                         else:
                             log("  HackMate-Core: theme assets missing, skipped", "warn")
                     except Exception as e:

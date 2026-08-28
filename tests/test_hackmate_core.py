@@ -79,6 +79,63 @@ class ConfigPatchTests(unittest.TestCase):
         hc.apply_to_config(c)
         self.assertIs(c["UEFI"]["Output"]["ProvideConsoleGop"], True)
 
+    def test_minimal_style_sets_minimal_ui_bit(self):
+        full = self._base()
+        minimal = self._base()
+        hc.apply_to_config(full, style="full")
+        hc.apply_to_config(minimal, style="minimal")
+        self.assertFalse(full["Misc"]["Boot"]["PickerAttributes"] & 0x0040)
+        self.assertTrue(minimal["Misc"]["Boot"]["PickerAttributes"] & 0x0040)
+
+    def test_unknown_style_falls_back_to_full(self):
+        c = self._base()
+        hc.apply_to_config(c, style="nonsense")
+        self.assertEqual(
+            c["Misc"]["Boot"]["PickerAttributes"] & ~1, hc.PICKER_ATTRIBUTES & ~1
+        )
+
+
+class BackgroundPickTests(unittest.TestCase):
+    def _stage(self, tmp):
+        import shutil
+
+        core = Path(tmp) / "Image" / "HackMate" / "Core"
+        core.mkdir(parents=True)
+        src = hc.RESOURCES / "Image" / "HackMate" / "Core"
+        for n in ("Background.icns", "Background_1440p.icns", "Background_2160p.icns"):
+            shutil.copy(src / n, core / n)
+        return core
+
+    def _bg_height(self, path):
+        d = path.read_bytes()
+        i = d.index(b"\x89PNG\r\n\x1a\n")
+        assert d[i + 12:i + 16] == b"IHDR", d[i + 12:i + 16]
+        return struct.unpack(">I", d[i + 20:i + 24])[0]
+
+    def test_swaps_to_1440p_for_a_1440p_display(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            core = self._stage(tmp)
+            hc._pick_background(core, "2560x1440", lambda *a: None)
+            self.assertEqual(self._bg_height(core / "Background.icns"), 1440)
+
+    def test_swaps_to_2160p_for_4k(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            core = self._stage(tmp)
+            hc._pick_background(core, "3840x2160", lambda *a: None)
+            self.assertEqual(self._bg_height(core / "Background.icns"), 2160)
+
+    def test_leaves_1080p_for_max_or_unknown(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            core = self._stage(tmp)
+            hc._pick_background(core, "Max", lambda *a: None)
+            self.assertEqual(self._bg_height(core / "Background.icns"), 1080)
+
 
 class GenerateHookTests(unittest.TestCase):
     def test_generate_flag_enables_the_picker(self):

@@ -2654,7 +2654,7 @@ class InstallScreen(Screen):
             from config_gen import generate as gen_config, write_plist, _required_ssdts
             macos_major = version.major if version else 0
             dual_boot = getattr(self.app, "dual_boot", "")
-            config = gen_config(profile, smbios, macos_major, wifi_kext_mode=self.app.wifi_kext_mode, dual_boot=dual_boot)
+            config = gen_config(profile, smbios, macos_major, wifi_kext_mode=self.app.wifi_kext_mode, dual_boot=dual_boot, hackmate_core=getattr(self.app, "hackmate_core", False))
             if self.app.disable_dgpu:
                 from config_editor import set_dgpu_disabled
                 set_dgpu_disabled(config, True)
@@ -2810,6 +2810,17 @@ class InstallScreen(Screen):
                                 log(f"  HfsPlus.efi download attempt {attempt + 1}/3 failed: {e}", "warn")
                         else:
                             log(f"  HfsPlus.efi download failed: {last_err}", "error")
+
+                    if getattr(self.app, "hackmate_core", False):
+                        try:
+                            import hackmate_core as _hc
+                            if _hc.available():
+                                _res = config.get("UEFI", {}).get("Output", {}).get("Resolution")
+                                _hc.install_resources(oc_dir, search_root, resolution=_res, log=log)
+                            else:
+                                log("  HackMate-Core: theme assets missing, skipped", "warn")
+                        except Exception as e:
+                            log(f"  HackMate-Core: install failed: {e}", "error")
                 else:
                     log("  Could not find OpenCore release asset", "error")
 
@@ -3594,6 +3605,7 @@ class HackMate(App):
     wifi_kext_mode:  str                   = "itlwm"
     disable_dgpu:    bool                  = False
     dual_boot:       str                   = ""
+    hackmate_core:   bool                  = False
     efi_output_path: str                   = ""
 
     def on_mount(self) -> None:

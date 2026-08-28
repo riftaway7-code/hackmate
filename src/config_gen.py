@@ -889,7 +889,6 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
             },
             "Entries":  [],
             "Security": {
-                "AllowNvramReset":        True,   # ResetNvramEntry.efi is loaded below; without this the picker entry it adds does nothing when selected
                 "AllowSetDefault":        True,
                 "ApECID":                 0,
                 "AuthRestart":            False,

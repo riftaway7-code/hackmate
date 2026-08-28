@@ -38,7 +38,11 @@ def apply_to_config(config: dict) -> None:
         out["Resolution"] = "Max"
 
 
-def install_resources(oc_dir, oc_release_root, log=print) -> list[str]:
+def install_resources(oc_dir, oc_release_root, log=None) -> list[str]:
+    if log is None:
+        def log(msg, level="info"):
+            print(msg)
+
     oc_dir = Path(oc_dir)
     installed = []
 
@@ -47,7 +51,7 @@ def install_resources(oc_dir, oc_release_root, log=print) -> list[str]:
         shutil.rmtree(dst_res)
     shutil.copytree(RESOURCES, dst_res)
     installed.append("Resources/")
-    log("  HackMate-Core: Resources/ installed")
+    log("  HackMate-Core: Resources/ installed", "ok")
 
     driver_dir = oc_dir / "Drivers"
     driver_dir.mkdir(parents=True, exist_ok=True)
@@ -57,7 +61,7 @@ def install_resources(oc_dir, oc_release_root, log=print) -> list[str]:
         if found:
             shutil.copy(str(found[0]), str(driver_dir / name))
             installed.append(name)
-            log(f"  HackMate-Core: driver {name}")
+            log(f"  HackMate-Core: driver {name}", "ok")
         else:
             log(f"  HackMate-Core: {name} not found in OpenCore release", "warn")
     return installed

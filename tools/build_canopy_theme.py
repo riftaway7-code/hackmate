@@ -114,9 +114,9 @@ def tint_icns(path, rgb):
             for x in range(im.width):
                 t = px_l[x, y] / 255
                 px_o[x, y] = (
-                    int(rgb[0] * (0.35 + 0.65 * t)),
-                    int(rgb[1] * (0.35 + 0.65 * t)),
-                    int(rgb[2] * (0.4 + 0.6 * t)),
+                    min(255, int(rgb[0] * (0.45 + 0.72 * t))),
+                    min(255, int(rgb[1] * (0.45 + 0.72 * t))),
+                    min(255, int(rgb[2] * (0.5 + 0.68 * t))),
                     px_a[x, y],
                 )
         outs.append(_png_bytes(tinted))
@@ -185,8 +185,8 @@ def render_banner_layer(w, h):
     d.text(((w - (sb[2] - sb[0])) // 2, y + th + int(h * 0.028)), SUBTITLE,
            font=sub_font, fill=(ACCENT[0], ACCENT[1], ACCENT[2], 235))
 
-    leg_font = _font(UI_CANDIDATES, max(13, int(w / 118)))
-    lg = int(h * 0.70)
+    leg_font = _font(UI_CANDIDATES, max(13, int(w / 112)))
+    lg = int(h * 0.66)
     lh = leg_font.getbbox("Ag")[3] + int(h * 0.012)
     for i, row in enumerate(LEGEND):
         rb = d.textbbox((0, 0), row, font=leg_font)
@@ -212,8 +212,21 @@ def build_background(src, w, h, blur, brightness, dark):
     bg = ImageEnhance.Brightness(bg).enhance(brightness)
     bg = ImageEnhance.Color(bg).enhance(0.82)
     bg = Image.alpha_composite(bg.convert("RGBA"), Image.new("RGBA", (w, h), (6, 10, 14, int(255 * dark))))
+    bg = Image.alpha_composite(bg, _vignette(w, h))
     bg = Image.alpha_composite(bg, render_banner_layer(w, h))
     return bg.convert("RGB")
+
+
+def _vignette(w, h):
+    small = max(2, w // 10)
+    v = Image.new("L", (small, int(small * h / w)), 0)
+    vd = ImageDraw.Draw(v)
+    vw, vh = v.size
+    vd.ellipse((-vw * 0.30, -vh * 0.30, vw * 1.30, vh * 1.30), fill=255)
+    v = v.filter(ImageFilter.GaussianBlur(small // 6)).resize((w, h), Image.LANCZOS)
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 150))
+    layer.putalpha(Image.eval(v, lambda p: int((255 - p) * 0.55)))
+    return layer
 
 
 def main():

@@ -830,13 +830,13 @@ def _booter_section(profile: HardwareProfile, resizable_bar: bool = False) -> di
         },
     }
 
-def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0, wifi_kext_mode: str = "itlwm", dual_boot: str = "") -> dict:
+def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0, wifi_kext_mode: str = "itlwm", dual_boot: str = "", hackmate_core: bool = False) -> dict:
     kexts = select_kexts(profile, wifi_kext_mode=wifi_kext_mode)
     layout_id = get_alc_layout(profile.audio_codec)
     audio_enabled = any(kext.name == "AppleALC" for kext in kexts)
     ssdts = _required_ssdts(profile, kexts)
 
-    return {
+    config = {
         "ACPI": {
             "Add":    _acpi_add(ssdts),
             "Delete": [],
@@ -911,6 +911,14 @@ def generate(profile: HardwareProfile, smbios: SMBIOSData, macos_major: int = 0,
         "PlatformInfo":     _platform_info(smbios),
         "UEFI":             _uefi_section(profile, dual_boot=dual_boot),
     }
+
+    if hackmate_core:
+        import hackmate_core as _hc
+
+        if _hc.available():
+            _hc.apply_to_config(config)
+
+    return config
 
 def sync_executable_paths(config: dict, kext_dir: Path) -> list[str]:
     """

@@ -24,15 +24,16 @@ def entry(name, path, flavour="Auto", args=""):
     }
 
 
-def patch_config(base):
+def patch_config(base, style="full"):
     with open(base, "rb") as f:
         c = plistlib.load(f)
 
+    attrs = {"full": 0x91, "minimal": 0xD1}.get(style, 0x91)
     boot = c["Misc"]["Boot"]
     boot.update({
         "PickerMode": "External",
         "PickerVariant": "HackMate\\Core",
-        "PickerAttributes": 145,
+        "PickerAttributes": attrs,
         "ShowPicker": True,
         "Timeout": 0,
         "HideAuxiliary": False,
@@ -150,10 +151,11 @@ def main():
     ap.add_argument("--oc", default="C:/Users/RAAHIM~1/AppData/Local/Temp/hmc/oc")
     ap.add_argument("--theme", default=str(Path(__file__).resolve().parents[1] / "src/assets/canopy/Resources"))
     ap.add_argument("--out", default="C:/Users/RAAHIM~1/AppData/Local/Temp/hmc/esp")
+    ap.add_argument("--minimal", action="store_true", help="minimal-UI style (no shutdown/restart buttons)")
     args = ap.parse_args()
 
     sample = Path(args.oc) / "Docs" / "Sample.plist"
-    cfg = patch_config(sample)
+    cfg = patch_config(sample, style="minimal" if args.minimal else "full")
     esp, cfg_path = assemble(args.oc, args.theme, args.out, cfg)
     print(f"ESP assembled at {esp}")
     print(f"config.plist at {cfg_path}")

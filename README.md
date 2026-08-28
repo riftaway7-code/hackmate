@@ -143,6 +143,19 @@ sudo ./build/macos/Build/Products/Release/gui_flutter.app/Contents/MacOS/gui_flu
    - downloads the latest opencore release
    - generates ssdts from ur actual dsdt using ssdttime
 
+## hackmate-core (experimental)
+
+optional branded boot picker. instead of opencore's black-and-white text menu
+u get a graphical screen: the hackmate banner over a blurred macos tahoe
+backdrop, mouse support, readable entry names, and a short legend for what
+safe mode / recovery / reset nvram do.
+
+it's **not a fork** — opencore itself is unchanged. it's an opencanopy theme
+(opencanopy ships with every opencore release) plus a few config.plist keys.
+turn it on by passing `hackmate_core=True` to `config_gen.generate()` or
+setting `params["hackmate_core"] = True` for a headless build; a build-screen
+toggle is still todo. details in [docs/HACKMATE_CORE.md](docs/HACKMATE_CORE.md).
+
 ## supported hardware
 
 **cpu generations:** sandy bridge · ivy bridge · haswell · broadwell · skylake · kaby lake · coffee lake · comet lake / ice lake · rocket lake and newer desktops with a supported amd dgpu · amd ryzen / threadripper desktops

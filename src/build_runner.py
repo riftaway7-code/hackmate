@@ -48,6 +48,7 @@ def run(params: dict, emit) -> dict:
     wifi_kext_mode: str = params.get("wifi_kext_mode", "itlwm")
     disable_dgpu: bool = bool(params.get("disable_dgpu", False))
     dual_boot: str = params.get("dual_boot", "")
+    hackmate_core: bool = bool(params.get("hackmate_core", True))
     local_output_path: str = params.get("local_output_path", "")
     confirm_phrase: str = params.get("confirm_phrase", "")
 
@@ -218,7 +219,7 @@ def run(params: dict, emit) -> dict:
         ui(40, "Generating config.plist...")
         log("── Generating config.plist...", "header")
         macos_major = version.major if version else 0
-        config = gen_config(profile, smbios, macos_major, wifi_kext_mode=wifi_kext_mode, dual_boot=dual_boot)
+        config = gen_config(profile, smbios, macos_major, wifi_kext_mode=wifi_kext_mode, dual_boot=dual_boot, hackmate_core=hackmate_core)
         if disable_dgpu:
             set_dgpu_disabled(config, True)
             log("  dGPU disabled in DeviceProperties", "ok")
@@ -359,6 +360,18 @@ def run(params: dict, emit) -> dict:
                             log(f"  HfsPlus.efi download attempt {attempt + 1}/3 failed: {e}", "warn")
                     else:
                         log(f"  HfsPlus.efi download failed: {last_err}", "error")
+
+                if hackmate_core:
+                    try:
+                        import hackmate_core as _hc
+
+                        if _hc.available():
+                            _res = config.get("UEFI", {}).get("Output", {}).get("Resolution")
+                            _hc.install_resources(oc_dir, search_root, resolution=_res, log=log)
+                        else:
+                            log("  HackMate-Core: theme assets missing, skipped", "warn")
+                    except Exception as e:
+                        log(f"  HackMate-Core: install failed: {e}", "error")
             else:
                 log("  Could not find OpenCore release asset", "error")
 

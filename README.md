@@ -143,6 +143,19 @@ sudo ./build/macos/Build/Products/Release/gui_flutter.app/Contents/MacOS/gui_flu
    - downloads the latest opencore release
    - generates ssdts from ur actual dsdt using ssdttime
 
+## hackmate-core (graphical boot picker)
+
+new EFI builds boot into a graphical picker instead of opencore's
+black-and-white text menu: the hackmate banner over a blurred macos tahoe
+backdrop, mouse support, readable entry names, and a short legend for what
+safe mode / recovery / reset nvram do. first launch shows a one-time notice;
+the build screen's classic-picker option turns it back off.
+
+it's **not a fork** — opencore itself is unchanged. it's opencore's own
+opencanopy picker (ships with every release) plus a hackmate theme and a few
+config.plist keys. proven on a real thinkpad t480s. details in
+[docs/HACKMATE_CORE.md](docs/HACKMATE_CORE.md).
+
 ## supported hardware
 
 **cpu generations:** sandy bridge · ivy bridge · haswell · broadwell · skylake · kaby lake · coffee lake · comet lake / ice lake · rocket lake and newer desktops with a supported amd dgpu · amd ryzen / threadripper desktops

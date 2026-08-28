@@ -48,7 +48,7 @@ def run(params: dict, emit) -> dict:
     wifi_kext_mode: str = params.get("wifi_kext_mode", "itlwm")
     disable_dgpu: bool = bool(params.get("disable_dgpu", False))
     dual_boot: str = params.get("dual_boot", "")
-    hackmate_core: bool = bool(params.get("hackmate_core", False))
+    hackmate_core: bool = bool(params.get("hackmate_core", True))
     local_output_path: str = params.get("local_output_path", "")
     confirm_phrase: str = params.get("confirm_phrase", "")
 

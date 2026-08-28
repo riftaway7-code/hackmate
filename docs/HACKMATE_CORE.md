@@ -24,17 +24,20 @@ turn it off by regenerating the config without the option.
 
 ## Enabling it
 
-### From a build
+**It's on by default.** New EFI builds ship with it. First launch of the TUI
+shows a one-time notice (`HackMateCoreNoticeScreen`, marker at
+`~/.hackmate/hackmate_core_notice.json`); the notice's "Use the classic text
+picker instead" button sets `HackMate.hackmate_core = False` for that build.
 
-Pass `hackmate_core=True`:
+- TUI: `HackMate.hackmate_core` (default `True`) is passed to `gen_config` and
+  `hackmate_core.install_resources` runs after the driver copy.
+- `build_runner.run()`: `params.get("hackmate_core", True)`.
+- Direct: `config_gen.generate(profile, smbios, macos_major,
+  hackmate_core=True | "full" | "minimal")` &mdash; the `generate()` parameter
+  itself still defaults to `False`, so bare calls in tests/tools are unchanged.
 
-```python
-config = config_gen.generate(profile, smbios, macos_major, hackmate_core=True)
-```
-
-or set `params["hackmate_core"] = True` before calling `build_runner.run()`.
-`build_runner` then copies the theme and `OpenCanopy.efi` into the EFI
-automatically, next to the other drivers.
+`build_runner` copies the theme and `OpenCanopy.efi` into the EFI automatically,
+picking the `Background` variant that matches `UEFI>Output>Resolution`.
 
 ### What it changes in config.plist
 

@@ -670,11 +670,11 @@ class DiscordScreen(Screen):
             webbrowser.open(discord_prompt.INVITE_URL)
             discord_prompt.mark_shown()
             self.app.pop_screen()
-            self.app.push_screen(WelcomeScreen())
+            self.app.push_screen(self.app._welcome_or_notice())
         elif event.button.id == "discord-later" and not event.button.disabled:
             discord_prompt.mark_shown()
             self.app.pop_screen()
-            self.app.push_screen(WelcomeScreen())
+            self.app.push_screen(self.app._welcome_or_notice())
 
 
 class LanguageScreen(Screen):
@@ -701,11 +701,49 @@ class LanguageScreen(Screen):
         from i18n import set_language
         if event.button.id == "back":
             self.app.pop_screen()
-            self.app.push_screen(WelcomeScreen())
+            self.app.push_screen(self.app._welcome_or_notice())
         elif event.button.id.startswith("lang-"):
             set_language(event.button.id[len("lang-"):])
             self.app.pop_screen()
-            self.app.push_screen(WelcomeScreen())
+            self.app.push_screen(self.app._welcome_or_notice())
+
+
+class HackMateCoreNoticeScreen(Screen):
+    """One-time notice: EFI builds now ship the HackMate-Core graphical picker."""
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Vertical(
+                Static("── NEW ────────────────────────────────────────────────", classes="title"),
+                Static(""),
+                Static("  User-friendly custom OpenCore boot picker", classes="info"),
+                Static(""),
+                Static("  New EFI builds now boot into a graphical picker instead of", classes="info"),
+                Static("  the plain text menu: a HackMate screen with your boot", classes="info"),
+                Static("  options, mouse support, and a short description of each one.", classes="info"),
+                Static(""),
+                Static("  Core OpenCore is UNMODIFIED. This is just OpenCore's own", classes="info"),
+                Static("  OpenCanopy picker with a HackMate theme + a few config keys.", classes="info"),
+                Static("  Nothing about the boot chain or security model changes.", classes="info"),
+                Static(""),
+                Button("Okay, cool", id="ok", classes="primary"),
+                Button("Use the classic text picker instead", id="classic", classes="back"),
+                classes="screen-inner"
+            )
+        )
+        yield Footer()
+
+    def _to_welcome(self) -> None:
+        import hackmate_core_notice
+        hackmate_core_notice.mark_shown()
+        self.app.pop_screen()
+        self.app.push_screen(WelcomeScreen())
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "classic":
+            self.app.hackmate_core = False
+        self._to_welcome()
 
 
 class WelcomeScreen(Screen):
@@ -800,7 +838,7 @@ class WelcomeScreen(Screen):
             import hwdb_submit
             hwdb_submit.set_consent(not hwdb_submit.has_consented())
             self.app.pop_screen()
-            self.app.push_screen(WelcomeScreen())
+            self.app.push_screen(self.app._welcome_or_notice())
         elif event.button.id == "language":
             self.app.push_screen(LanguageScreen())
         elif event.button.id == "pro":
@@ -3605,8 +3643,14 @@ class HackMate(App):
     wifi_kext_mode:  str                   = "itlwm"
     disable_dgpu:    bool                  = False
     dual_boot:       str                   = ""
-    hackmate_core:   bool                  = False
+    hackmate_core:   bool                  = True
     efi_output_path: str                   = ""
+
+    def _welcome_or_notice(self):
+        import hackmate_core_notice
+        if hackmate_core_notice.already_shown():
+            return WelcomeScreen()
+        return HackMateCoreNoticeScreen()
 
     def on_mount(self) -> None:
         if DEMO_MODE:
@@ -3622,7 +3666,7 @@ class HackMate(App):
     def push_next_after_consent(self) -> None:
         import discord_prompt
         if discord_prompt.already_shown():
-            self.push_screen(WelcomeScreen())
+            self.push_screen(self._welcome_or_notice())
         else:
             self.push_screen(DiscordScreen())
 

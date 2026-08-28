@@ -97,3 +97,20 @@ real silicon); use the minimal test config to iterate on the picker itself.
 2160p variants (`Background.icns`, `Background_1440p.icns`, `Background_2160p.icns`).
 For a display that isn't one of those, regenerate with `RESOLUTIONS` edited, or
 accept letterboxing against `DefaultBackgroundColor` (black by default).
+
+## Notes from testing
+
+- OpenCanopy's layout (icon size, row position, spacing, button placement) is
+  fixed. The "optional manifest" the config docs mention for an icon set is not
+  used by any built-in theme, and there is no per-theme geometry override in
+  practice. A theme controls the background, chrome colours, icons, and labels
+  only &mdash; not positioning. The banner and legend in `Background.icns` are
+  placed to sit clear of where OpenCanopy draws the entry row.
+- `Resources/Font/` and `Resources/Label/` are vendored verbatim from
+  OcBinaryData and were byte-identical to `master` at time of writing.
+  `build_canopy_theme.py --ocbinary <path>` re-syncs them.
+- `tools/preview_theme.py` renders a picker mockup PNG (real background + a mock
+  icon row) without QEMU &mdash; fast iteration and a shareable image.
+  `src/assets/canopy/preview.png` / `preview-minimal.png`.
+- Set NVRAM `UIScale` to `02` for a HiDPI (4K) panel; the generated config uses
+  `01` (correct for 1080p/1440p).

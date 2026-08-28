@@ -226,6 +226,11 @@ def main():
             tint_icns(p, ACCENT)
     print("tinted selection chrome to HackMate cyan")
 
+    restart = theme / "Restart.icns"
+    if restart.is_file():
+        shutil.copy(restart, theme / "ResetNVRAM.icns")
+        print("aliased Restart.icns -> ResetNVRAM.icns")
+
     for i, (w, h) in enumerate(RESOLUTIONS):
         img = build_background(args.wallpaper, w, h, args.blur, args.brightness, args.dark)
         png = _png_bytes(img)

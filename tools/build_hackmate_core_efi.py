@@ -62,15 +62,15 @@ def patch_config(base):
     })
 
     c["Misc"]["Tools"] = [
-        tool("UEFI Shell", "OpenShell.efi", "UEFIShell:Tool", aux=True),
-        tool("Reset NVRAM", "CleanNvram.efi", "NVRAMReset:Reset", aux=True),
+        tool("UEFI Shell", "OpenShell.efi", "OpenShell:UEFIShell:Shell", aux=True),
+        tool("Reset NVRAM", "CleanNvram.efi", "ResetNVRAM:NVRAMTool", aux=True),
         tool("List Partitions", "ListPartitions.efi", "Tool", aux=True),
     ]
     c["Misc"]["Entries"] = [
-        entry("macOS", "OpenShell.efi", "Apple:Auto", ""),
-        entry("Safe Mode", "OpenShell.efi", "Apple:Auto", "-x"),
+        entry("macOS", "OpenShell.efi", "Apple", ""),
+        entry("Safe Mode", "OpenShell.efi", "Apple", "-x"),
         entry("Recovery", "OpenShell.efi", "AppleRecv:Apple", "-r"),
-        entry("Windows", "OpenShell.efi", "Windows:Auto", "-w"),
+        entry("Windows", "OpenShell.efi", "Windows", "-w"),
     ]
 
     uefi = c["UEFI"]

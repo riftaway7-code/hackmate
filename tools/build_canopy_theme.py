@@ -82,6 +82,43 @@ def wrap_icns(png_1x, png_2x):
     return b"icns" + struct.pack(">I", len(body) + 8) + body
 
 
+def _icns_chunks(data):
+    off = 8
+    out = []
+    while off < len(data):
+        tag = data[off:off + 4]
+        ln = struct.unpack(">I", data[off + 4:off + 8])[0]
+        out.append((tag, data[off + 8:off + ln]))
+        off += ln
+    return out
+
+
+def tint_icns(path, rgb):
+    chunks = _icns_chunks(path.read_bytes())
+    outs = []
+    for tag, payload in chunks:
+        im = Image.open(io.BytesIO(payload)).convert("RGBA")
+        r, g, b, a = im.split()
+        lum = Image.merge("RGB", (r, g, b)).convert("L")
+        tinted = Image.new("RGBA", im.size)
+        px_l = lum.load()
+        px_a = a.load()
+        px_o = tinted.load()
+        for y in range(im.height):
+            for x in range(im.width):
+                t = px_l[x, y] / 255
+                px_o[x, y] = (
+                    int(rgb[0] * (0.35 + 0.65 * t)),
+                    int(rgb[1] * (0.35 + 0.65 * t)),
+                    int(rgb[2] * (0.4 + 0.6 * t)),
+                    px_a[x, y],
+                )
+        outs.append(_png_bytes(tinted))
+    while len(outs) < 2:
+        outs.append(outs[-1])
+    path.write_bytes(wrap_icns(outs[0], outs[1]))
+
+
 def _clean_banner():
     keep = set("█ ")
     rows = ["".join(ch if ch in keep else " " for ch in line).rstrip() for line in BANNER]
@@ -182,6 +219,12 @@ def main():
     for nm in ("Apple.icns", "ExtApple.icns"):
         (theme / nm).write_bytes(wrap_icns(ap_png, ap_png))
     print("generated Apple.icns + ExtApple.icns")
+
+    for nm in ("Selected.icns", "Selector.icns", "SetDefault.icns"):
+        p = theme / nm
+        if p.is_file():
+            tint_icns(p, ACCENT)
+    print("tinted selection chrome to HackMate cyan")
 
     for i, (w, h) in enumerate(RESOLUTIONS):
         img = build_background(args.wallpaper, w, h, args.blur, args.brightness, args.dark)

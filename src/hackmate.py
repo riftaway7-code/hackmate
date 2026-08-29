@@ -126,23 +126,36 @@ if "--doctor" in sys.argv:
     from efi_doctor import main as _doctor_main
     sys.exit(_doctor_main(sys.argv))
 
+def _spec_arg(flag):
+    if flag not in sys.argv:
+        return None
+    rest = [a for a in sys.argv[sys.argv.index(flag) + 1:] if not a.startswith("-")]
+    return rest[0] if rest else None
+
+
+_SPEC_OVERRIDE = _spec_arg("--spec")
+
+if "--save-spec" in sys.argv:
+    import hardware as _hardware
+
+    _out = _spec_arg("--save-spec")
+    if not _out:
+        print("usage: hackmate --save-spec <file.json>")
+        sys.exit(2)
+    _hardware.save_spec(_hardware.scan(), _out)
+    print(f"spec written to {_out}")
+    sys.exit(0)
+
 if "--explain" in sys.argv:
     import json as _json
 
     import hardware as _hardware
     import rationale as _rationale
 
-    _spec_path = None
-    _rest = [a for a in sys.argv[sys.argv.index("--explain") + 1:] if not a.startswith("-")]
-    if _rest:
-        _spec_path = _rest[0]
+    _spec_path = _SPEC_OVERRIDE or _spec_arg("--explain")
 
     if _spec_path:
-        with open(_spec_path, "r", encoding="utf-8") as _fh:
-            _data = _json.load(_fh)
-        _fields = _hardware.HardwareProfile.__dataclass_fields__
-        _profile = _hardware.HardwareProfile(**{k: v for k, v in _data.items() if k in _fields})
-        _major = int(_data.get("macos_major", 0) or 0)
+        _profile, _major = _hardware.load_spec(_spec_path)
     else:
         _profile = _hardware.scan()
         _major = 0
@@ -1563,11 +1576,19 @@ class ScanScreen(Screen):
 
     @work(thread=True)
     def run_scan(self) -> None:
-        self.app.call_from_thread(
-            self.query_one("#scan-status", Static).update,
-            "  Detecting CPU, GPU, audio, network..."
-        )
-        profile = scan()
+        if _SPEC_OVERRIDE:
+            self.app.call_from_thread(
+                self.query_one("#scan-status", Static).update,
+                f"  Loading hardware spec from {_SPEC_OVERRIDE}..."
+            )
+            from hardware import load_spec
+            profile, _ = load_spec(_SPEC_OVERRIDE)
+        else:
+            self.app.call_from_thread(
+                self.query_one("#scan-status", Static).update,
+                "  Detecting CPU, GPU, audio, network..."
+            )
+            profile = scan()
         self.app.call_from_thread(self._show_results, profile)
 
     def _show_results(self, profile: HardwareProfile) -> None:

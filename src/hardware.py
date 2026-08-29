@@ -2,6 +2,7 @@ import subprocess
 import re
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from compat import IS_WINDOWS, IS_LINUX, IS_MACOS
 import pci_ids
 
@@ -1348,6 +1349,37 @@ def scan() -> HardwareProfile:
     detect_smbios(profile)
     _set_cpu_brand(profile)
     return profile
+
+
+SPEC_VERSION = 1
+
+
+def profile_to_dict(profile: HardwareProfile) -> dict:
+    from dataclasses import asdict
+    return asdict(profile)
+
+
+def profile_from_dict(data: dict) -> HardwareProfile:
+    fields = HardwareProfile.__dataclass_fields__
+    clean = {k: v for k, v in data.items() if k in fields}
+    if "raw_pci" in clean and not isinstance(clean["raw_pci"], list):
+        clean["raw_pci"] = list(clean["raw_pci"] or [])
+    return HardwareProfile(**clean)
+
+
+def save_spec(profile: HardwareProfile, path, macos_major: int = 0) -> None:
+    payload = {"hackmate_spec": SPEC_VERSION, "profile": profile_to_dict(profile)}
+    if macos_major:
+        payload["macos_major"] = int(macos_major)
+    Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
+
+
+def load_spec(path) -> tuple[HardwareProfile, int]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    raw = data.get("profile", data)
+    macos_major = int(data.get("macos_major", 0) or 0)
+    return profile_from_dict(raw), macos_major
+
 
 if __name__ == "__main__":
     p = scan()

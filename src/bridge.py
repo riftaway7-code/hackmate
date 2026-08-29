@@ -296,6 +296,19 @@ def _rationale_explain(params, emit):
     return {"decisions": rationale.to_rows(decisions), "text": rationale.render(decisions)}
 
 
+def _hardware_save_spec(params, emit):
+    profile = hardware.HardwareProfile(**{
+        k: v for k, v in params["profile"].items() if k in hardware.HardwareProfile.__dataclass_fields__
+    })
+    hardware.save_spec(profile, params["path"], macos_major=int(params.get("macos_major", 0) or 0))
+    return {"path": params["path"]}
+
+
+def _hardware_load_spec(params, emit):
+    profile, macos_major = hardware.load_spec(params["path"])
+    return {"profile": _to_jsonable(profile), "macos_major": macos_major}
+
+
 def _ocvalidate_check(params, emit):
     target = Path(params["path"])
     if target.is_dir():
@@ -549,6 +562,8 @@ METHODS = {
     "hardware.manual_options": _hardware_manual_options,
     "rationale.explain": _rationale_explain,
     "ocvalidate.check": _ocvalidate_check,
+    "hardware.save_spec": _hardware_save_spec,
+    "hardware.load_spec": _hardware_load_spec,
     "recovery.compatible_versions": _recovery_compatible_versions,
     "recovery.all_versions": _recovery_all_versions,
     "recovery.download": _recovery_download,

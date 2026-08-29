@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import urllib.request
 import json
 import zipfile
@@ -508,19 +509,72 @@ def select_kexts(profile: HardwareProfile, wifi_kext_mode: str = "itlwm") -> lis
 
     return selected
 
+_GH_TOKEN_CACHE: list = []
+
+
+def _github_token() -> str:
+    if _GH_TOKEN_CACHE:
+        return _GH_TOKEN_CACHE[0]
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    if not token:
+        try:
+            out = subprocess.run(
+                ["gh", "auth", "token"], capture_output=True, text=True, timeout=5
+            )
+            if out.returncode == 0:
+                token = out.stdout.strip()
+        except Exception:
+            token = ""
+    _GH_TOKEN_CACHE.append(token)
+    return token
+
+
 def _github_headers() -> dict:
     """Unauthenticated GitHub API calls are capped at 60 req/hr, which every
-    kext download eats into individually — a handful of reruns in the same
-    hour is enough to trip it. GITHUB_TOKEN raises that to 5000 req/hr, but
-    nothing ever actually sent it despite the rate-limit error telling users
-    to set it. Wire it up if present."""
+    kext download eats into individually. A token (GITHUB_TOKEN, GH_TOKEN, or
+    an authenticated gh CLI) raises that to 5000 req/hr."""
     headers = {"User-Agent": "HackMate/1.0"}
-    token = os.environ.get("GITHUB_TOKEN")
+    token = _github_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
 
+_RELEASE_META_TTL = 6 * 3600
+
+
+def _release_cache_path(repo: str) -> Path:
+    return _CACHE_ROOT / "gh_release" / f"{repo.replace('/', '_')}.json"
+
+
 def _get_latest_release(repo: str) -> Optional[dict]:
+    cache_path = _release_cache_path(repo)
+    stale = None
+    if cache_path.exists():
+        try:
+            stale = json.loads(cache_path.read_text(encoding="utf-8"))
+            if time.time() - cache_path.stat().st_mtime < _RELEASE_META_TTL:
+                return stale
+        except Exception:
+            stale = None
+
+    try:
+        fresh = _get_latest_release_uncached(repo)
+    except RuntimeError:
+        if stale is not None:
+            return stale
+        raise
+
+    if fresh:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(fresh), encoding="utf-8")
+        except Exception:
+            pass
+        return fresh
+    return stale
+
+
+def _get_latest_release_uncached(repo: str) -> Optional[dict]:
     import urllib.error
     headers = _github_headers()
 

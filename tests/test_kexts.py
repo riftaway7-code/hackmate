@@ -1,4 +1,8 @@
+import json
+import os
 import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -301,6 +305,67 @@ class ZipExtractionSafetyTests(unittest.TestCase):
             self.assertTrue((extract_dir / "Good.kext" / "Contents" / "Info.plist").exists())
             self.assertFalse((tmp_path.parent / "evil.txt").exists())
             self.assertFalse((tmp_path / "evil.txt").exists())
+
+
+class GithubTokenTests(unittest.TestCase):
+    def setUp(self):
+        kexts._GH_TOKEN_CACHE.clear()
+        self.addCleanup(kexts._GH_TOKEN_CACHE.clear)
+
+    def test_gh_token_env_var_is_picked_up(self):
+        with patch.dict("os.environ", {"GH_TOKEN": "ghp_fromenv", "GITHUB_TOKEN": ""}, clear=False):
+            self.assertEqual(kexts._github_token(), "ghp_fromenv")
+        self.assertEqual(kexts._github_headers()["Authorization"], "Bearer ghp_fromenv")
+
+    def test_falls_back_to_gh_cli(self):
+        from unittest.mock import MagicMock
+        result = MagicMock(returncode=0, stdout="ghp_fromcli\n")
+        with patch.dict("os.environ", {"GH_TOKEN": "", "GITHUB_TOKEN": ""}, clear=False), \
+             patch.object(kexts.subprocess, "run", return_value=result) as run:
+            self.assertEqual(kexts._github_token(), "ghp_fromcli")
+            run.assert_called_once()
+
+    def test_no_token_means_no_auth_header(self):
+        with patch.dict("os.environ", {"GH_TOKEN": "", "GITHUB_TOKEN": ""}, clear=False), \
+             patch.object(kexts.subprocess, "run", side_effect=FileNotFoundError):
+            self.assertNotIn("Authorization", kexts._github_headers())
+
+
+class ReleaseMetaCacheTests(unittest.TestCase):
+    def _redirect_cache(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        p = patch.object(kexts, "_CACHE_ROOT", Path(self._tmp.name))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_fresh_cache_hit_skips_the_network(self):
+        self._redirect_cache()
+        path = kexts._release_cache_path("acme/widget")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"tag_name": "v9"}', encoding="utf-8")
+        with patch.object(kexts, "_get_latest_release_uncached", side_effect=AssertionError("network hit")) as net:
+            self.assertEqual(kexts._get_latest_release("acme/widget"), {"tag_name": "v9"})
+            net.assert_not_called()
+
+    def test_rate_limit_falls_back_to_stale_cache(self):
+        self._redirect_cache()
+        path = kexts._release_cache_path("acme/widget")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"tag_name": "old"}', encoding="utf-8")
+        old = time.time() - kexts._RELEASE_META_TTL - 10
+        os.utime(path, (old, old))
+        with patch.object(kexts, "_get_latest_release_uncached", side_effect=RuntimeError("rate limit")):
+            self.assertEqual(kexts._get_latest_release("acme/widget"), {"tag_name": "old"})
+
+    def test_successful_fetch_writes_the_cache(self):
+        self._redirect_cache()
+        with patch.object(kexts, "_get_latest_release_uncached", return_value={"tag_name": "v2"}):
+            kexts._get_latest_release("acme/widget")
+        self.assertEqual(
+            json.loads(kexts._release_cache_path("acme/widget").read_text(encoding="utf-8")),
+            {"tag_name": "v2"},
+        )
 
 
 if __name__ == "__main__":

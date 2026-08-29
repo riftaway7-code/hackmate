@@ -1,9 +1,14 @@
 import plistlib
+import time
 from pathlib import Path
 from hardware import HardwareProfile, has_macos_supported_gpu
 from kexts import KextEntry, select_kexts, get_alc_layout
 from smbios import SMBIOSData
-from compat import IS_WINDOWS, dmi_field, dmi_vendor, cpu_core_count
+from compat import IS_WINDOWS, dmi_field, dmi_vendor, cpu_core_count, http_get, real_home
+
+AMD_VANILLA_URL = "https://raw.githubusercontent.com/AMD-OSX/AMD_Vanilla/master/patches.plist"
+_AMD_VANILLA_CACHE = real_home() / ".hackmate" / "cache" / "amd_vanilla" / "patches.plist"
+_AMD_VANILLA_TTL = 24 * 3600
 
 IG_PLATFORM_IDS: dict[str, bytes] = {
     # Sandy Bridge
@@ -560,10 +565,30 @@ def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:
         },
     }
 
+def _amd_vanilla_raw() -> bytes:
+    if _AMD_VANILLA_CACHE.exists():
+        age = time.time() - _AMD_VANILLA_CACHE.stat().st_mtime
+        if age < _AMD_VANILLA_TTL:
+            return _AMD_VANILLA_CACHE.read_bytes()
+
+    try:
+        data = http_get(AMD_VANILLA_URL, timeout=30)
+        plistlib.loads(data)
+    except Exception:
+        if _AMD_VANILLA_CACHE.exists():
+            return _AMD_VANILLA_CACHE.read_bytes()
+        return Path(__file__).with_name("amd_patches.plist").read_bytes()
+
+    try:
+        _AMD_VANILLA_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        _AMD_VANILLA_CACHE.write_bytes(data)
+    except Exception:
+        pass
+    return data
+
+
 def _amd_kernel_patches(profile: HardwareProfile) -> list[dict]:
-    patch_path = Path(__file__).with_name("amd_patches.plist")
-    with patch_path.open("rb") as patch_file:
-        patches = plistlib.load(patch_file)["Kernel"]["Patch"]
+    patches = plistlib.loads(_amd_vanilla_raw())["Kernel"]["Patch"]
 
     cores = profile.core_count or cpu_core_count()
     if not 1 <= cores <= 255:

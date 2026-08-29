@@ -143,6 +143,13 @@ class CpuNeedsSpoofTests(unittest.TestCase):
 
 
 class AmdKernelPatchesTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        bundled = Path(config_gen.__file__).with_name("amd_patches.plist").read_bytes()
+        p = patch.object(config_gen, "_amd_vanilla_raw", return_value=bundled)
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_valid_core_count_is_written_into_the_patch(self):
         profile = _profile(cpu_vendor="amd", cpu_generation=12, core_count=6)
         patches = config_gen._amd_kernel_patches(profile)
@@ -152,9 +159,6 @@ class AmdKernelPatchesTests(unittest.TestCase):
             self.assertEqual(p["Replace"][1], 6)
 
     def test_zero_core_count_falls_back_to_detected_core_count(self):
-        # core_count=0 is HardwareProfile's "not set" sentinel (`or` idiom),
-        # not an explicit invalid value — it should trigger auto-detection
-        # instead of raising.
         from unittest.mock import patch
         profile = _profile(cpu_vendor="amd", cpu_generation=12, core_count=0)
         with patch.object(config_gen, "cpu_core_count", return_value=6):
@@ -172,6 +176,28 @@ class AmdKernelPatchesTests(unittest.TestCase):
         profile = _profile(cpu_vendor="amd", cpu_generation=12, core_count=256)
         with self.assertRaises(ValueError):
             config_gen._amd_kernel_patches(profile)
+
+
+class AmdVanillaSourceTests(unittest.TestCase):
+    def _bundled(self):
+        return Path(config_gen.__file__).with_name("amd_patches.plist").read_bytes()
+
+    def test_fetch_failure_falls_back_to_bundled(self):
+        from unittest.mock import patch
+        with patch.object(config_gen, "_AMD_VANILLA_CACHE") as cache, \
+             patch.object(config_gen, "http_get", side_effect=OSError("offline")):
+            cache.exists.return_value = False
+            raw = config_gen._amd_vanilla_raw()
+        self.assertEqual(plistlib.loads(raw)["Kernel"]["Patch"][0].keys(),
+                         plistlib.loads(self._bundled())["Kernel"]["Patch"][0].keys())
+
+    def test_bad_payload_is_rejected_and_falls_back(self):
+        from unittest.mock import patch
+        with patch.object(config_gen, "_AMD_VANILLA_CACHE") as cache, \
+             patch.object(config_gen, "http_get", return_value=b"not a plist"):
+            cache.exists.return_value = False
+            raw = config_gen._amd_vanilla_raw()
+        self.assertIn(b"Kernel", raw)
 
 
 class PlatformInfoTests(unittest.TestCase):

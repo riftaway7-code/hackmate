@@ -342,19 +342,128 @@ def _build_xosi_ssdt(acpi_dir: Path, ssdttime_dir: Path) -> bool:
     iasl = find_iasl(ssdttime_dir)
     return _compile_dsl(XOSI_DSL_TEMPLATE, "SSDT-XOSI", acpi_dir, iasl)
 
+_INTEL_GPIO_HIDS = (
+    "INT33FF", "INT344B", "INT3450", "INT345D", "INT34BB",
+    "INT3455", "INT34C5", "INT34C6", "INTC1055", "INTC1056",
+)
+_I2C_HID_IDS = ("PNP0C50", "ACPI0C50")
+_SCOPE_OPENERS = ("Scope", "Device", "PowerResource", "Processor", "ThermalZone")
+_NODE_RE = re.compile(
+    r"^(\s*)(?:" + "|".join(_SCOPE_OPENERS) + r")\s*\(\s*([\\\^A-Za-z_][\w\\.\^]*)"
+)
+
+
+def _decompile_dsdt(dsdt_path: Path, iasl) -> Optional[str]:
+    if not iasl:
+        return None
+    try:
+        work = dsdt_path.parent / "_gpio_decomp"
+        work.mkdir(exist_ok=True)
+        target = work / "DSDT.aml"
+        target.write_bytes(dsdt_path.read_bytes())
+        subprocess.run([str(iasl), "-d", str(target)], capture_output=True, timeout=40, cwd=str(work))
+        dsl = work / "DSDT.dsl"
+        return dsl.read_text(errors="replace") if dsl.exists() else None
+    except Exception:
+        return None
+
+
+def _qualified_path(lines: list[str], idx: int) -> Optional[str]:
+    own = _NODE_RE.match(lines[idx])
+    if not own:
+        return None
+    parts = [own.group(2)]
+    cur_indent = len(own.group(1))
+    for j in range(idx - 1, -1, -1):
+        m = _NODE_RE.match(lines[j])
+        if not m:
+            continue
+        ind = len(m.group(1))
+        if ind < cur_indent:
+            parts.append(m.group(2))
+            cur_indent = ind
+            if ind == 0 or m.group(2).startswith("\\"):
+                break
+    parts.reverse()
+    joined = ".".join(p.strip("\\") for p in parts if p not in ("\\", "^"))
+    return "\\" + joined
+
+
+def _block_end(lines: list[str], idx: int) -> int:
+    base = len(lines[idx]) - len(lines[idx].lstrip())
+    for j in range(idx + 1, len(lines)):
+        stripped = lines[j].strip()
+        if not stripped:
+            continue
+        ind = len(lines[j]) - len(lines[j].lstrip())
+        if ind <= base and stripped.startswith("}"):
+            return j
+    return len(lines) - 1
+
+
+def _gpio_controller_path(dsl: str) -> Optional[str]:
+    lines = dsl.splitlines()
+    candidates = []
+    for i, line in enumerate(lines):
+        m = _NODE_RE.match(line)
+        if not m or not line.lstrip().startswith("Device"):
+            continue
+        name = m.group(2).strip("\\^")
+        head = "\n".join(lines[i + 1:i + 16])
+        own_hid = any(hid in head for hid in _INTEL_GPIO_HIDS)
+        if not (own_hid or name in ("GPI0", "GPIO")):
+            continue
+        path = _qualified_path(lines, i)
+        if not path:
+            continue
+        rank = 2 if name in ("GPI0", "GPIO") else 1
+        candidates.append((rank, len(m.group(1)), path))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[-1][2]
+
+
+def _touchpad_gpio_source(dsl: str) -> Optional[str]:
+    lines = dsl.splitlines()
+    for i, line in enumerate(lines):
+        m = _NODE_RE.match(line)
+        if not m or not line.lstrip().startswith("Device"):
+            continue
+        end = _block_end(lines, i)
+        body = "\n".join(lines[i:end + 1])
+        if not any(hid in body for hid in _I2C_HID_IDS):
+            continue
+        gi = re.search(r'GpioInt\s*\([^)]*?"([^"]+)"', body, re.DOTALL)
+        if gi:
+            src = gi.group(1)
+            return src if src.startswith("\\") else "\\" + src.strip("\\")
+    return None
+
+
 def _build_gpio_ssdt(dsdt_path: Path, acpi_dir: Path, ssdttime_dir: Path, ssdt_name: str = "SSDT-GPI0") -> bool:
     try:
-        data = dsdt_path.read_bytes()
-        for name in (b"GPI0", b"GPIO"):
-            if data.find(name) != -1:
-                gpio_name = name.decode()
-                break
-        else:
-            return False
-        gpio_path = f"\\_SB.PCI0.{gpio_name}"
-        dsl = GPIO_DSL_TEMPLATE.format(gpio_path=gpio_path)
         iasl = find_iasl(ssdttime_dir)
-        return _compile_dsl(dsl, ssdt_name, acpi_dir, iasl)
+        gpio_path = None
+
+        dsl = _decompile_dsdt(dsdt_path, iasl)
+        if dsl:
+            gpio_path = _touchpad_gpio_source(dsl) or _gpio_controller_path(dsl)
+
+        if not gpio_path:
+            data = dsdt_path.read_bytes()
+            for name in (b"GPI0", b"GPIO"):
+                if data.find(name) != -1:
+                    gpio_path = f"\\_SB.PCI0.{name.decode()}"
+                    break
+
+        if not gpio_path:
+            return False
+        if not gpio_path.startswith("\\"):
+            gpio_path = "\\" + gpio_path
+
+        dsl_out = GPIO_DSL_TEMPLATE.format(gpio_path=gpio_path)
+        return _compile_dsl(dsl_out, ssdt_name, acpi_dir, iasl)
     except Exception:
         return False
 

@@ -220,5 +220,105 @@ class FrozenAssetsPathTests(unittest.TestCase):
         self.assertEqual(path, Path("/fake/meipass/dir") / "assets" / "acpi")
 
 
+_DSL_NESTED_CONTROLLER = """\
+DefinitionBlock ("", "DSDT", 2, "OEM", "OEMDSDT", 0x1)
+{
+    Scope (\\_SB)
+    {
+        Device (PCI0)
+        {
+            Device (SBUS)
+            {
+                Device (GPI0)
+                {
+                    Name (_HID, "INT344B")
+                    Name (_CID, "INT344B")
+                }
+            }
+            Device (I2C1)
+            {
+                Device (TPD0)
+                {
+                    Name (_HID, "PNP0C50")
+                    Name (_CRS, ResourceTemplate ()
+                    {
+                        GpioInt (Level, ActiveLow, Exclusive, PullUp, 0x0000,
+                            "\\_SB.PCI0.SBUS.GPI0", 0x00, ResourceConsumer, ,)
+                        { 0x005B }
+                    })
+                }
+            }
+        }
+    }
+}
+"""
+
+_DSL_PLAIN_GPIO_NO_TOUCHPAD = """\
+DefinitionBlock ("", "DSDT", 2, "OEM", "OEMDSDT", 0x1)
+{
+    Scope (\\_SB.PCI0)
+    {
+        Device (GPIO)
+        {
+            Name (_HID, "INT3450")
+        }
+    }
+}
+"""
+
+
+class GpioPathDiscoveryTests(unittest.TestCase):
+    def test_controller_path_is_fully_qualified_from_nesting(self):
+        self.assertEqual(
+            ssdt._gpio_controller_path(_DSL_NESTED_CONTROLLER),
+            "\\_SB.PCI0.SBUS.GPI0",
+        )
+
+    def test_touchpad_crs_resource_source_wins(self):
+        self.assertEqual(
+            ssdt._touchpad_gpio_source(_DSL_NESTED_CONTROLLER),
+            "\\_SB.PCI0.SBUS.GPI0",
+        )
+
+    def test_plain_gpio_device_without_touchpad(self):
+        self.assertEqual(
+            ssdt._gpio_controller_path(_DSL_PLAIN_GPIO_NO_TOUCHPAD),
+            "\\_SB.PCI0.GPIO",
+        )
+        self.assertIsNone(ssdt._touchpad_gpio_source(_DSL_PLAIN_GPIO_NO_TOUCHPAD))
+
+    def test_build_falls_back_to_byte_grep_when_decompile_unavailable(self):
+        with tempfile.NamedTemporaryFile(suffix=".aml", delete=False) as f:
+            f.write(b"....Device (GPI0)....")
+            aml = Path(f.name)
+        try:
+            with tempfile.TemporaryDirectory() as out, \
+                 patch.object(ssdt, "_decompile_dsdt", return_value=None), \
+                 patch.object(ssdt, "find_iasl", return_value=None), \
+                 patch.object(ssdt, "_compile_dsl", return_value=True) as compile_dsl:
+                ok = ssdt._build_gpio_ssdt(aml, Path(out), Path("x"))
+            self.assertTrue(ok)
+            rendered = compile_dsl.call_args.args[0]
+            self.assertIn("\\_SB.PCI0.GPI0", rendered)
+        finally:
+            aml.unlink(missing_ok=True)
+
+    def test_build_uses_the_real_path_from_the_dsl(self):
+        with tempfile.NamedTemporaryFile(suffix=".aml", delete=False) as f:
+            f.write(b"....Device (GPI0)....")
+            aml = Path(f.name)
+        try:
+            with tempfile.TemporaryDirectory() as out, \
+                 patch.object(ssdt, "_decompile_dsdt", return_value=_DSL_NESTED_CONTROLLER), \
+                 patch.object(ssdt, "find_iasl", return_value="iasl"), \
+                 patch.object(ssdt, "_compile_dsl", return_value=True) as compile_dsl:
+                ssdt._build_gpio_ssdt(aml, Path(out), Path("x"))
+            rendered = compile_dsl.call_args.args[0]
+            self.assertIn("\\_SB.PCI0.SBUS.GPI0", rendered)
+            self.assertNotIn("Scope (\\_SB.PCI0.GPI0)\n", rendered)
+        finally:
+            aml.unlink(missing_ok=True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -126,6 +126,34 @@ if "--doctor" in sys.argv:
     from efi_doctor import main as _doctor_main
     sys.exit(_doctor_main(sys.argv))
 
+if "--explain" in sys.argv:
+    import json as _json
+
+    import hardware as _hardware
+    import rationale as _rationale
+
+    _spec_path = None
+    _rest = [a for a in sys.argv[sys.argv.index("--explain") + 1:] if not a.startswith("-")]
+    if _rest:
+        _spec_path = _rest[0]
+
+    if _spec_path:
+        with open(_spec_path, "r", encoding="utf-8") as _fh:
+            _data = _json.load(_fh)
+        _fields = _hardware.HardwareProfile.__dataclass_fields__
+        _profile = _hardware.HardwareProfile(**{k: v for k, v in _data.items() if k in _fields})
+        _major = int(_data.get("macos_major", 0) or 0)
+    else:
+        _profile = _hardware.scan()
+        _major = 0
+
+    _decisions = _rationale.explain(_profile, macos_major=_major)
+    if "--json" in sys.argv:
+        print(_json.dumps(_rationale.to_rows(_decisions), indent=2))
+    else:
+        print(_rationale.render(_decisions))
+    sys.exit(0)
+
 require_admin()
 
 from updater import check_and_update

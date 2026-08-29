@@ -35,6 +35,7 @@ import hwdb_submit
 import config_editor
 import hardware
 import recovery
+import rationale
 import build_runner
 
 
@@ -281,6 +282,19 @@ def _hardware_manual_options(params, emit):
     }
 
 
+def _rationale_explain(params, emit):
+    profile = hardware.HardwareProfile(**{
+        k: v for k, v in params["profile"].items() if k in hardware.HardwareProfile.__dataclass_fields__
+    })
+    decisions = rationale.explain(
+        profile,
+        macos_major=int(params.get("macos_major", 0) or 0),
+        wifi_kext_mode=params.get("wifi_kext_mode", "itlwm"),
+        dual_boot=params.get("dual_boot", ""),
+    )
+    return {"decisions": rationale.to_rows(decisions), "text": rationale.render(decisions)}
+
+
 def _recovery_compatible_versions(params, emit):
     versions = recovery.compatible_versions(
         params.get("cpu_gen", 0),
@@ -519,6 +533,7 @@ METHODS = {
     "hardware.warnings": _hardware_warnings,
     "hardware.needs_dgpu_prompt": _hardware_needs_dgpu_prompt,
     "hardware.manual_options": _hardware_manual_options,
+    "rationale.explain": _rationale_explain,
     "recovery.compatible_versions": _recovery_compatible_versions,
     "recovery.all_versions": _recovery_all_versions,
     "recovery.download": _recovery_download,

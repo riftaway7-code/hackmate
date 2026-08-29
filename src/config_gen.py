@@ -459,25 +459,31 @@ def _device_properties(
 
     return {"Add": props, "Delete": {}}
 
+_I3_CPUID_EAX_LE = {
+    6:  "E3060500",
+    7:  "E9060900",
+    8:  "EA060900",
+    9:  "EC060900",
+    10: "55060A00",
+}
+
+
+def _mask(eax_le: str) -> tuple[bytes, bytes]:
+    return (
+        bytes.fromhex(eax_le + "00000000" * 3),
+        bytes.fromhex("FFFFFFFF" + "00000000" * 3),
+    )
+
+
 def _cpu_needs_spoof(profile: HardwareProfile) -> tuple[bytes, bytes] | None:
     name = profile.cpu_name.lower()
     if profile.cpu_vendor == "intel" and profile.cpu_generation >= 11:
-        # OpenCore's documented Rocket Lake and newer recommendation: expose
-        # the Comet Lake 0x0A0655 CPUID so XCPM can initialize.
-        return (
-            bytes.fromhex("55060A00" + "00000000" * 3),
-            bytes.fromhex("FFFFFFFF" + "00000000" * 3),
-        )
+        return _mask("55060A00")
     if "pentium" in name or "celeron" in name:
-        return (
-            bytes.fromhex("EA060900" + "00000000" * 3),
-            bytes.fromhex("FFFFFFFF" + "00000000" * 3),
-        )
+        gen = profile.cpu_generation
+        return _mask(_I3_CPUID_EAX_LE.get(gen, "EA060900"))
     if "xeon" in name:
-        return (
-            bytes.fromhex("EB060900" + "00000000" * 3),
-            bytes.fromhex("FFFFFFFF" + "00000000" * 3),
-        )
+        return _mask("EB060900")
     return None
 
 def _kernel_section(profile: HardwareProfile, kexts: list[KextEntry]) -> dict:

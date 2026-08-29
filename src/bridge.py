@@ -302,6 +302,7 @@ def _recovery_compatible_versions(params, emit):
         params.get("cpu_vendor", "intel"),
         params.get("cpu_codename", ""),
         params.get("gpu_name", ""),
+        params.get("cpu_name", ""),
     )
     result = []
     for v in versions:

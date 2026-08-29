@@ -1610,6 +1610,7 @@ class VersionScreen(Screen):
             profile.cpu_vendor,
             profile.cpu_codename,
             profile.gpu_name,
+            profile.cpu_name,
         )
         self.versions = versions
 

@@ -117,6 +117,24 @@ class RecoveryCompatibilityTests(unittest.TestCase):
         self.assertIn("10.15", amd_versions)
         self.assertNotIn("10.14", amd_versions)
 
+    def test_pentium_celeron_are_capped_at_monterey(self):
+        versions = [
+            v.version for v in compatible_versions(
+                8, "intel", "intel", "", "", "Intel Pentium Gold G5400"
+            )
+        ]
+        self.assertIn("12", versions)
+        self.assertNotIn("13", versions)
+        self.assertNotIn("26", versions)
+
+    def test_ordinary_core_cpu_is_not_capped_at_monterey(self):
+        versions = [
+            v.version for v in compatible_versions(
+                8, "intel", "intel", "", "", "Intel Core i5-8400"
+            )
+        ]
+        self.assertIn("13", versions)
+
 
 class RecoveryCommandTests(unittest.TestCase):
     def _version(self, version: str):

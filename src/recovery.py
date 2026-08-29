@@ -161,12 +161,20 @@ def _nvidia_max_macos_version(gpu_name: str) -> str | None:
     return "10.13"
 
 
+def _no_avx2_max_macos_version(cpu_name: str) -> str | None:
+    name = cpu_name.lower()
+    if "pentium" in name or "celeron" in name:
+        return "12"
+    return None
+
+
 def compatible_versions(
     cpu_gen: int,
     gpu_vendor: str,
     cpu_vendor: str = "intel",
     cpu_codename: str = "",
     gpu_name: str = "",
+    cpu_name: str = "",
 ) -> list[MacOSVersion]:
     minimum_version = _minimum_macos_version(
         cpu_gen,
@@ -178,6 +186,7 @@ def compatible_versions(
         if gpu_vendor == "nvidia"
         else None
     )
+    cpu_maximum = _no_avx2_max_macos_version(cpu_name)
     result = []
     for v in MACOS_VERSIONS:
         if _version_key(v.version) < _version_key(minimum_version):
@@ -185,6 +194,11 @@ def compatible_versions(
         if (
             nvidia_maximum
             and _version_key(v.version) > _version_key(nvidia_maximum)
+        ):
+            continue
+        if (
+            cpu_maximum
+            and _version_key(v.version) > _version_key(cpu_maximum)
         ):
             continue
         if cpu_vendor != "amd":
@@ -456,6 +470,7 @@ if __name__ == "__main__":
         profile.cpu_vendor,
         profile.cpu_codename,
         profile.gpu_name,
+        profile.cpu_name,
     )
     print(f"\nCompatible macOS versions for Gen {profile.cpu_generation} {profile.cpu_vendor.upper()} [{profile.gpu_vendor} GPU]:\n")
     for i, v in enumerate(versions):

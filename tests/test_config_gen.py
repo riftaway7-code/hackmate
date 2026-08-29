@@ -116,9 +116,18 @@ class CpuNeedsSpoofTests(unittest.TestCase):
         self.assertEqual(data[:4], bytes.fromhex("55060A00"))
         self.assertEqual(mask[:4], bytes.fromhex("FFFFFFFF"))
 
-    def test_pentium_gets_spoofed_regardless_of_generation(self):
-        profile = _profile(cpu_vendor="intel", cpu_generation=6, cpu_name="Pentium G4560")
-        self.assertIsNotNone(config_gen._cpu_needs_spoof(profile))
+    def test_pentium_spoof_matches_the_same_generation_i3(self):
+        cases = {6: "E3060500", 7: "E9060900", 8: "EA060900", 9: "EC060900", 10: "55060A00"}
+        for gen, eax_le in cases.items():
+            profile = _profile(cpu_vendor="intel", cpu_generation=gen, cpu_name="Pentium Gold G5400")
+            spoof = config_gen._cpu_needs_spoof(profile)
+            self.assertIsNotNone(spoof)
+            self.assertEqual(spoof[0][:4], bytes.fromhex(eax_le), f"gen {gen}")
+
+    def test_pentium_of_unknown_generation_falls_back_to_coffee_lake(self):
+        profile = _profile(cpu_vendor="intel", cpu_generation=0, cpu_name="Pentium G4560")
+        spoof = config_gen._cpu_needs_spoof(profile)
+        self.assertEqual(spoof[0][:4], bytes.fromhex("EA060900"))
 
     def test_celeron_gets_spoofed(self):
         profile = _profile(cpu_vendor="intel", cpu_generation=7, cpu_name="Celeron G3930")

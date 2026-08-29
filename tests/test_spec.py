@@ -61,5 +61,30 @@ class SpecRoundTripTests(unittest.TestCase):
         self.assertEqual(loaded.raw_pci, ["a", "b"])
 
 
+class DetectBoardTests(unittest.TestCase):
+    def _chipset(self, board, vendor="", cpu_vendor="intel"):
+        from unittest.mock import patch
+        p = HardwareProfile(cpu_vendor=cpu_vendor)
+        fields = {"board_name": board, "board_vendor": vendor, "sys_vendor": vendor, "product_name": board}
+        with patch("compat.dmi_field", side_effect=lambda f: fields.get(f, "")):
+            hardware._detect_board(p)
+        return p.chipset
+
+    def test_intel_z390_board(self):
+        self.assertEqual(self._chipset("PRIME Z390-A"), "Z390")
+
+    def test_intel_laptop_hm370(self):
+        self.assertEqual(self._chipset("HM370 Chipset - ThinkPad"), "HM370")
+
+    def test_amd_b550_board(self):
+        self.assertEqual(self._chipset("ROG STRIX B550-F GAMING", cpu_vendor="amd"), "B550")
+
+    def test_hedt_x299(self):
+        self.assertEqual(self._chipset("X299 AORUS MASTER"), "X299")
+
+    def test_no_recognisable_chipset_is_left_blank(self):
+        self.assertEqual(self._chipset("Default string"), "")
+
+
 if __name__ == "__main__":
     unittest.main()

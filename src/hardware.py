@@ -54,6 +54,10 @@ class HardwareProfile:
     resizable_bar: bool = False
     cpu_brand: str = ""
 
+    board_vendor: str = ""
+    board_name: str = ""
+    chipset: str = ""
+
     raw_pci: list = field(default_factory=list)
 
 def needs_dgpu_disable_prompt(profile: HardwareProfile) -> bool:
@@ -1348,7 +1352,40 @@ def scan() -> HardwareProfile:
 
     detect_smbios(profile)
     _set_cpu_brand(profile)
+    _detect_board(profile)
     return profile
+
+
+_INTEL_CHIPSET_RE = re.compile(r"\b((?:hm|wm|qm|cm|c|z|h|b|q|w)?[0-9]{2,3})\b", re.I)
+_AMD_CHIPSET_RE = re.compile(r"\b(trx[0-9]{2}|wrx[0-9]{2}|[abx][0-9]{3}|x[0-9]{2})\b", re.I)
+
+
+def _detect_board(profile: HardwareProfile) -> None:
+    from compat import dmi_field
+
+    if not profile.board_vendor:
+        profile.board_vendor = dmi_field("board_vendor") or dmi_field("sys_vendor")
+    if not profile.board_name:
+        profile.board_name = dmi_field("board_name") or dmi_field("product_name")
+
+    if profile.chipset:
+        return
+
+    name = (profile.board_name or "").lower()
+    if profile.cpu_vendor == "amd":
+        m = _AMD_CHIPSET_RE.search(name)
+        if m:
+            profile.chipset = m.group(1).upper()
+        return
+
+    for token in re.split(r"[\s/_-]+", name):
+        m = _INTEL_CHIPSET_RE.fullmatch(token)
+        if m and any(c.isdigit() for c in token) and not token.isdigit():
+            profile.chipset = token.upper()
+            return
+    m = re.search(r"\b(x299|x99|x79|c621|c422)\b", name)
+    if m:
+        profile.chipset = m.group(1).upper()
 
 
 SPEC_VERSION = 1

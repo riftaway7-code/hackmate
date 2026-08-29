@@ -68,6 +68,45 @@ class KextEntryDictTests(unittest.TestCase):
         self.assertFalse(entry["Enabled"])
 
 
+class RequiredSsdtsTests(unittest.TestCase):
+    def _ssdts(self, **overrides):
+        return config_gen._required_ssdts(_profile(**overrides), kexts=[])
+
+    def test_z370_desktop_gets_neither_awac_nor_pmc(self):
+        ssdts = self._ssdts(cpu_generation=8, chipset="Z370")
+        self.assertNotIn("SSDT-AWAC", ssdts)
+        self.assertNotIn("SSDT-PMC", ssdts)
+
+    def test_z390_desktop_gets_awac_and_pmc(self):
+        ssdts = self._ssdts(cpu_generation=8, chipset="Z390")
+        self.assertIn("SSDT-AWAC", ssdts)
+        self.assertIn("SSDT-PMC", ssdts)
+
+    def test_coffee_lake_desktop_of_unknown_chipset_still_gets_pmc(self):
+        self.assertIn("SSDT-PMC", self._ssdts(cpu_generation=8, chipset=""))
+
+    def test_comet_lake_400_series_desktop_gets_awac_but_not_pmc(self):
+        ssdts = self._ssdts(cpu_generation=10, chipset="B460")
+        self.assertIn("SSDT-AWAC", ssdts)
+        self.assertNotIn("SSDT-PMC", ssdts)
+
+    def test_asus_z490_gets_rhub_but_a_gigabyte_z490_does_not(self):
+        self.assertIn("SSDT-RHUB", self._ssdts(cpu_generation=10, chipset="Z490", board_vendor="ASUSTeK COMPUTER INC."))
+        self.assertNotIn("SSDT-RHUB", self._ssdts(cpu_generation=10, chipset="Z490", board_vendor="Gigabyte"))
+
+    def test_ice_lake_laptop_gets_rhub(self):
+        self.assertIn("SSDT-RHUB", self._ssdts(cpu_generation=10, platform="laptop", oc_platform="Ice Lake"))
+
+    def test_amd_b550_gets_cpur_but_x570_does_not(self):
+        self.assertIn("SSDT-CPUR", self._ssdts(cpu_vendor="amd", cpu_generation=0, chipset="B550"))
+        self.assertNotIn("SSDT-CPUR", self._ssdts(cpu_vendor="amd", cpu_generation=0, chipset="X570"))
+
+    def test_laptop_gets_ec_usbx_not_plain_ec(self):
+        ssdts = self._ssdts(platform="laptop", cpu_generation=8)
+        self.assertIn("SSDT-EC-USBX", ssdts)
+        self.assertNotIn("SSDT-EC", ssdts)
+
+
 class AcpiAddTests(unittest.TestCase):
     def test_builds_one_entry_per_ssdt_all_enabled(self):
         entries = config_gen._acpi_add(["SSDT-PLUG", "SSDT-EC"])

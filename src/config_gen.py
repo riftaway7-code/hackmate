@@ -258,40 +258,53 @@ def _kext_entry(kext: KextEntry, enabled: bool = True) -> dict:
         "PlistPath":      "Contents/Info.plist",
     }
 
+_PMC_CHIPSETS = {"B360", "B365", "H310", "H370", "Q370", "Z390", "C246"}
+_RHUB_ASUS_CHIPSETS = {"B460", "H470", "Z490", "H410", "W480"}
+_CPUR_CHIPSETS = {"B550", "A520", "A620", "B650", "X670", "B840", "B850", "X870"}
+
+
 def _required_ssdts(profile: HardwareProfile, kexts: list[KextEntry]) -> list[str]:
     ssdts = []
     gen = profile.cpu_generation
-    kext_names = {k.name for k in kexts}
+    intel = profile.cpu_vendor == "intel"
+    amd = profile.cpu_vendor == "amd"
+    laptop = profile.platform == "laptop"
+    desktop = profile.platform == "desktop"
+    chipset = (profile.chipset or "").upper()
+    codename = (profile.oc_platform or profile.cpu_codename or "").lower()
+    board_vendor = (profile.board_vendor or "").lower()
     has_i2c = any(k.name.startswith("VoodooI2C") for k in kexts)
 
-    # CPU power management — always
     ssdts.append("SSDT-PLUG")
-
     ssdts.append("SSDT-GPRW")
 
-    if gen in (2, 3):
+    if intel and gen in (2, 3):
         ssdts.append("SSDT-IMEI")
 
-    if profile.platform == "laptop":
+    if laptop:
         ssdts.append("SSDT-EC-USBX")
     else:
         ssdts.append("SSDT-EC")
-        if gen >= 6:
+        if amd or gen >= 6:
             ssdts.append("SSDT-USBX")
 
-    # Backlight (laptop only)
-    if profile.platform == "laptop":
+    if laptop:
         ssdts.append("SSDT-PNLF")
 
-    # AWAC clock fix — Z390/B460+ desktops (gen 9+); laptops never have AWAC
-    if gen >= 9 and profile.platform == "desktop" and profile.cpu_vendor == "intel":
+    if intel and desktop and gen >= 8 and chipset != "Z370":
         ssdts.append("SSDT-AWAC")
 
-    # PMC fix — Coffee Lake (gen 8) desktop
-    if gen >= 8 and profile.platform == "desktop" and profile.cpu_vendor == "intel":
+    if intel and desktop and (chipset in _PMC_CHIPSETS or (gen == 8 and not chipset)):
         ssdts.append("SSDT-PMC")
 
-    # I2C GPIO — needed for I2C trackpad
+    if intel and desktop and "asus" in board_vendor and chipset in _RHUB_ASUS_CHIPSETS:
+        ssdts.append("SSDT-RHUB")
+    if intel and laptop and "ice lake" in codename:
+        ssdts.append("SSDT-RHUB")
+
+    if amd and chipset in _CPUR_CHIPSETS:
+        ssdts.append("SSDT-CPUR")
+
     if has_i2c:
         ssdts.append("SSDT-GPI0")
         ssdts.append("SSDT-XOSI")

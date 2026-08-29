@@ -52,6 +52,10 @@ _SSDT_REASON = {
     "SSDT-IMEI": "adds the IMEI device on Sandy/Ivy Bridge boards that omit it",
     "SSDT-GPI0": "wakes the I2C GPIO controller the trackpad hangs off",
     "SSDT-XOSI": "spoofs _OSI so Windows-gated ACPI paths run under macOS",
+    "SSDT-RHUB": "resets the USB root hub on Asus 400-series and Ice Lake so ports enumerate (manual install)",
+    "SSDT-CPUR": "replaces the AM4 500-series / AM5 Processor objects macOS trips over (manual install)",
+    "SSDT-UNC": "disables the uncore PCI bridges on HEDT that macOS cannot handle (manual install)",
+    "SSDT-RTC0-RANGE": "fixes the RTC region size on X99/X299 HEDT (manual install)",
 }
 
 _BOOTER_QUIRK_REASON = {

@@ -277,7 +277,7 @@ class RequiredSsdtSafetyTests(unittest.TestCase):
                 self.assertNotIn("SSDT-AWAC", ssdts)
                 self.assertNotIn("SSDT-PMC", ssdts)
 
-    def test_modern_intel_desktop_still_gets_intel_chipset_ssdts(self):
+    def test_modern_intel_desktop_still_gets_awac(self):
         for generation in (11, 12):
             with self.subTest(generation=generation):
                 profile = HardwareProfile(
@@ -289,7 +289,15 @@ class RequiredSsdtSafetyTests(unittest.TestCase):
                 ssdts = config_gen._required_ssdts(profile, [])
 
                 self.assertIn("SSDT-AWAC", ssdts)
-                self.assertIn("SSDT-PMC", ssdts)
+                self.assertNotIn("SSDT-PMC", ssdts)
+
+    def test_three_hundred_series_chipset_gets_both_awac_and_pmc(self):
+        profile = HardwareProfile(
+            cpu_vendor="intel", cpu_generation=9, platform="desktop", chipset="Z390",
+        )
+        ssdts = config_gen._required_ssdts(profile, [])
+        self.assertIn("SSDT-AWAC", ssdts)
+        self.assertIn("SSDT-PMC", ssdts)
 
 
 class XhciUnsupportedChipsetTests(unittest.TestCase):

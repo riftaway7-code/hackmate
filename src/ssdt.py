@@ -50,7 +50,7 @@ SSDT_MENU_KEYWORDS: dict[str, list[str]] = {
 }
 
 # SSDTs SSDTTime has no equivalent for
-MANUAL_SSDTS: set[str] = set()
+MANUAL_SSDTS: set[str] = {"SSDT-RHUB", "SSDT-CPUR", "SSDT-UNC", "SSDT-RTC0-RANGE"}
 
 # Double-braces {{ }} are literal braces in the f-string/format output.
 

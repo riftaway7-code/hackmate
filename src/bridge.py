@@ -36,6 +36,7 @@ import config_editor
 import hardware
 import recovery
 import rationale
+import ocvalidate
 import build_runner
 
 
@@ -295,6 +296,18 @@ def _rationale_explain(params, emit):
     return {"decisions": rationale.to_rows(decisions), "text": rationale.render(decisions)}
 
 
+def _ocvalidate_check(params, emit):
+    target = Path(params["path"])
+    if target.is_dir():
+        candidate = target / "EFI" / "OC" / "config.plist"
+        if not candidate.exists():
+            hits = list(target.rglob("config.plist"))
+            candidate = hits[0] if hits else candidate
+        target = candidate
+    ok, lines = ocvalidate.validate(target)
+    return {"ok": ok, "lines": lines, "config": str(target)}
+
+
 def _recovery_compatible_versions(params, emit):
     versions = recovery.compatible_versions(
         params.get("cpu_gen", 0),
@@ -535,6 +548,7 @@ METHODS = {
     "hardware.needs_dgpu_prompt": _hardware_needs_dgpu_prompt,
     "hardware.manual_options": _hardware_manual_options,
     "rationale.explain": _rationale_explain,
+    "ocvalidate.check": _ocvalidate_check,
     "recovery.compatible_versions": _recovery_compatible_versions,
     "recovery.all_versions": _recovery_all_versions,
     "recovery.download": _recovery_download,

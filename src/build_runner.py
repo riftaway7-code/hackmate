@@ -24,6 +24,7 @@ from kexts import select_kexts, download_kexts, download_heliport, download_usbt
 from auto_usb_map import generate_auto_map, write_map_kext
 from ssdt import generate as gen_ssdts, generate_disable_ssdt
 from efi_check import check as efi_check
+from ocvalidate import validate as run_ocvalidate
 from config_editor import set_dgpu_disabled
 import build_history
 import hwdb_submit
@@ -484,6 +485,25 @@ def run(params: dict, emit) -> dict:
             log(f"  {len(infos)} recommendation(s) — {len(oks)} checks passed", "info")
         else:
             log(f"  All {len(oks)} checks passed", "ok")
+
+        ui(98, "Running ocvalidate...")
+        log("", "info")
+        log("── ocvalidate (OpenCore) ─────────────────────────", "header")
+        try:
+            oc_ok, oc_lines = run_ocvalidate(
+                config_path,
+                oc_extract_dir=locals().get("oc_extract"),
+                oc_zip=locals().get("oc_zip"),
+            )
+            for ln in oc_lines:
+                log(f"  {ln}", "info" if oc_ok else "warn")
+            if oc_ok:
+                log("  ocvalidate: no problems reported", "ok")
+            else:
+                log("  ocvalidate reported problems — review the config before booting", "warn")
+        except Exception as e:
+            log(f"  ocvalidate skipped: {e}", "info")
+        log("──────────────────────────────────────────────────", "header")
 
         if not local_mode:
             ui(99, "Unmounting USB...")

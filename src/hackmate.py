@@ -154,6 +154,26 @@ if "--explain" in sys.argv:
         print(_rationale.render(_decisions))
     sys.exit(0)
 
+if "--ocvalidate" in sys.argv:
+    from pathlib import Path as _Path
+
+    import ocvalidate as _ocvalidate
+
+    _rest = [a for a in sys.argv[sys.argv.index("--ocvalidate") + 1:] if not a.startswith("-")]
+    _target = _Path(_rest[0]) if _rest else _Path.cwd()
+    if _target.is_dir():
+        _cand = _target / "EFI" / "OC" / "config.plist"
+        if not _cand.exists():
+            _hits = list(_target.rglob("config.plist"))
+            _cand = _hits[0] if _hits else _cand
+        _target = _cand
+
+    _ok, _lines = _ocvalidate.validate(_target)
+    for _ln in _lines:
+        print(_ln)
+    print("ocvalidate: OK" if _ok else "ocvalidate: problems reported")
+    sys.exit(0 if _ok else 1)
+
 require_admin()
 
 from updater import check_and_update

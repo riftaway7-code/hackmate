@@ -4,6 +4,7 @@ Checks GitHub for new commits, shows changelog, asks user before updating.
 """
 
 import os
+import re
 import sys
 import urllib.request
 import json
@@ -126,7 +127,10 @@ def _is_frozen() -> bool:
 
 def _current_exe_name() -> str:
     """Filename (no extension) of the exe currently running, e.g. 'HackMate' or 'HackMate-GUI'."""
-    return Path(sys.executable).stem if _is_frozen() else "HackMate"
+    if not _is_frozen():
+        return "HackMate"
+    base = re.split(r"[\\/]", sys.executable)[-1]
+    return base[:-4] if base.lower().endswith(".exe") else Path(base).stem
 
 
 def _get_latest_exe_url() -> str | None:

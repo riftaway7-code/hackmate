@@ -130,6 +130,7 @@ class SmbiosRegenerationWarningTests(unittest.TestCase):
                 patch.object(build_runner.compat, "get_usb_drives", return_value=[("/dev/sdb", "16 GB", "USB")]),
                 patch.object(build_runner.compat, "get_mount_path", return_value=str(mount)),
                 patch.object(build_runner.compat, "get_tmp_dir", return_value=str(Path(tmp) / "tmp")),
+                patch.object(build_runner.compat, "mount_usb", return_value=True),
                 # skip_format=True does NOT skip the recovery-download block
                 # (only repair/local_mode do) — mock it so this test can't
                 # reach real network code before hitting the stop point below.

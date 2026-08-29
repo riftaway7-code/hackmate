@@ -20,6 +20,8 @@ class HardwareProfile:
     gpu_vendor: str = ""      # intel / amd / nvidia
     gpu_device_id: str = ""
     gpu_subsystem: str = ""
+    gpu_pci_device: int = -1
+    gpu_pci_function: int = -1
 
     dgpu_name: str = ""
     dgpu_vendor: str = ""     # nvidia / amd — only set when discrete GPU alongside Intel iGPU
@@ -799,10 +801,22 @@ def _classify_gpus(gpus: list[str]) -> tuple[str, str, str, str]:
     return igpu_name, igpu_vendor, dgpu_name, dgpu_vendor
 
 
+def _decode_windows_pci_address(address) -> tuple[int, int]:
+    if isinstance(address, bool) or not isinstance(address, int):
+        return (-1, -1)
+    if address < 0 or address > 0xFFFFFFFF:
+        return (-1, -1)
+    device = (address >> 16) & 0xFFFF
+    function = address & 0xFFFF
+    if not (0 <= device <= 31) or not (0 <= function <= 7):
+        return (-1, -1)
+    return (device, function)
+
+
 def _detect_gpu_windows(profile: HardwareProfile):
     raw = _ps(
         "Get-WmiObject Win32_VideoController | "
-        "Select-Object Name,PNPDeviceID | ConvertTo-Json -Compress"
+        "Select-Object Name,PNPDeviceID,Address,BusNumber | ConvertTo-Json -Compress"
     ).strip()
     controllers = []
     try:
@@ -840,6 +854,7 @@ def _detect_gpu_windows(profile: HardwareProfile):
         gpus = [name.strip() for name in names_raw.split("||") if name.strip()]
 
     ids_by_name = {}
+    addr_by_name = {}
     for item in controllers:
         if not isinstance(item, dict):
             continue
@@ -848,6 +863,8 @@ def _detect_gpu_windows(profile: HardwareProfile):
         match = re.search(r"DEV_([0-9A-Fa-f]{4})", pnp)
         if name and match:
             ids_by_name[name] = match.group(1).upper()
+        if name:
+            addr_by_name[name] = item.get("Address")
 
     igpu_name, igpu_vendor, dgpu_name, dgpu_vendor = _classify_gpus(gpus)
     if igpu_name:
@@ -861,6 +878,11 @@ def _detect_gpu_windows(profile: HardwareProfile):
     elif gpus:
         profile.gpu_name = gpus[0]
         profile.gpu_device_id = ids_by_name.get(gpus[0], "")
+
+    if profile.gpu_name:
+        profile.gpu_pci_device, profile.gpu_pci_function = _decode_windows_pci_address(
+            addr_by_name.get(profile.gpu_name)
+        )
 
 def _get_hda_codec_linux() -> str:
     try:

@@ -6,16 +6,66 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-09-09
+
+The biggest correctness pass since 2.0.0. Most of it is hardware detection: whole families of CPUs, GPUs, and NICs were being misidentified, and the wrong identification quietly produced an EFI that booted but had the wrong SMBIOS, the wrong framebuffer, or a NIC/audio device that never came up. Also ships HackMate-Core (a branded graphical boot picker) and a "why" explanation for every choice the generator makes.
+
 ### Fixed
-- Rocket Lake CPUs were getting mislabeled as Tiger Lake, which threw off GPU/platform detection.
-- Full audit of the kext database against live GitHub data: fixed ~11 kexts that were silently broken (repo renamed/deleted, or the download pattern stopped matching) — including FakeSMC, VoodooHDA, NullEthernet, and the whole BrcmPatchRAM Bluetooth family.
+
+**CPU / platform identification**
+- Intel gen-11 desktops (Rocket Lake) were labeled Tiger Lake, which cascaded into the wrong GPU and platform handling. `oc_platform` was also being computed before platform detection had run.
+- Intel Core Ultra 100-series (Meteor Lake) was unrecognized and silently fell back to a Kaby Lake framebuffer.
+- Ryzen 2000/3000-series G/U-suffix APUs were classified as a later Zen architecture than they are.
+- AMD Zen 4/5 desktops were given the Intel-only `CpuTopologyRebuild` kext, and a desktop chassis was being misdetected as a laptop running on a UPS.
+- Pentium/Celeron CPUID spoofing now follows the CPU generation, and those chips are capped at Monterey (the last release they can run).
+
+**GPU**
+- macOS GPU detection, when it saw both an iGPU and a dGPU, discarded whichever one it decided was the "loser" entirely instead of keeping both.
+- AMD RX Vega APUs were classified as discrete cards; modern `NNNM`-style iGPU names weren't recognized as APUs at all.
+- Intel iGPU + AMD dGPU desktops never got `NootRX`/`RadeonSensor` for the discrete card.
+- `nv_disable=1` was never applied on Optimus laptops (Intel iGPU + Nvidia dGPU).
+- An unsupported Nvidia GPU was blocking *every* macOS version, which defeated the GOP-passthrough fallback that exists for exactly that case.
+- GOP passthrough was never enabled for systems with no GPU at all, and there was no warning either.
+
+**SMBIOS**
+- AMD laptops were handed Intel-only `MacBookPro16,x` SMBIOS models.
+
+**Storage / networking / audio device properties**
+- The NVMe "built-in" device property was hardcoded to one fixed PCI path — wrong on many boards.
+- I225/I226 spoofs and the Realtek / I219 built-in properties were likewise pinned to fixed PCI paths.
+- Linux ethernet detection had no I225/I226 branches, so those NICs were left unidentified.
+- Linux audio detection could pick a GPU's HDMI audio function over the real onboard codec.
+- Onboard audio `layout-id` was injected on the Intel PCH path only, leaving AMD boards silent.
+
+**ACPI**
+- `SSDT-AWAC` and `SSDT-PMC` were being injected on every modern AMD desktop, where neither belongs.
+
+**BIOS guidance**
+- The BIOS checklist was missing IOMMU guidance for AMD and, in one path, suggested disabling the system's only GPU.
+
+**Kext database**
+- Full audit against live GitHub data fixed ~11 kexts that were silently broken (repo renamed/deleted, or the release asset pattern stopped matching) — including FakeSMC, VoodooHDA, NullEthernet, and the whole BrcmPatchRAM Bluetooth family.
+- 3 kexts removed that no longer have a working source anywhere.
+
+**Other**
+- CI suite is green again (had 7 pre-existing failures).
 
 ### Added
-- Pre-build hardware warnings for configurations that just won't boot: AMD laptop CPUs, mobile Atom/Celeron/Pentium, Rocket Lake with no dGPU (no video output), Atheros WiFi past High Sierra.
-- 6 new kexts added to the database; 3 removed that have no working source anywhere anymore.
+- **HackMate-Core** — a branded graphical OpenCore boot picker built on an OpenCanopy theme (the picker chrome only; the OpenCore binaries are unmodified). On by default with a first-run notice, wired through both the TUI and CLI build paths, with a QEMU test harness and a `--minimal` preview mode.
+- **Rationale / explain** — every decision the config.plist generator makes now comes with a plain-language reason and a link to the relevant Dortania section.
+- **`ocvalidate`** — OpenCore's own validator is run against the generated config as part of the build.
+- **Live AMD_Vanilla patches** — the AMD kernel patches are fetched from upstream with a 24-hour cache, falling back to the bundled copy offline.
+- **GitHub release metadata caching** — release lookups are cached on disk, and `GH_TOKEN` / the `gh` CLI are used for auth when available (avoids rate limits).
+- **Hardware spec files** — describe a target machine in a file to generate an EFI for hardware you're not currently running on.
+- Pre-build hardware warnings for configs that simply won't boot: AMD laptop CPUs, mobile Atom/Celeron/Pentium, Rocket Lake with no dGPU (no video out), Atheros WiFi past High Sierra.
+- Chipset-aware SSDT selection, closer to Dortania's prebuilt SSDT matrix; `SSDT-GPI0` now targets the real GPIO controller path pulled from the DSDT.
+- 6 new kexts in the database.
+- Test coverage for previously untested modules: `discord_prompt`, `config_editor`, `project_stats`, `efi_doctor`, `oc_log`.
+- **HackMate Community** — a Reddit-style discussion board hosted on GitHub Pages.
 
 ### Changed
-- Cleaned up unnecessary comment bloat across the codebase.
+- Kext load order (`LOAD_ORDER`) is now complete, and touchpad kext selection trusts `profile.touchpad_type`.
+- Cleaned up comment bloat across the codebase.
 
 ## [2.0.0] - 2026-07-12
 
